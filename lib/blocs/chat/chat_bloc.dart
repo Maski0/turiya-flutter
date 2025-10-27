@@ -1,0 +1,240 @@
+import 'dart:convert';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../services/backend_api_service.dart';
+import '../../services/cache_service.dart';
+import 'chat_event.dart';
+import 'chat_state.dart';
+
+/// BLoC for managing chat/message state
+class ChatBloc extends Bloc<ChatEvent, ChatState> {
+  final BackendApiService _backendApi;
+  final CacheService _cacheService;
+
+  ChatBloc({
+    BackendApiService? backendApi,
+    required CacheService cacheService,
+  })  : _backendApi = backendApi ?? BackendApiService(),
+        _cacheService = cacheService,
+        super(const ChatInitial()) {
+    on<ChatMessageSent>(_onMessageSent);
+    on<ChatHistoryRequested>(_onHistoryRequested);
+    on<ChatHistoryDeleted>(_onHistoryDeleted);
+    on<ChatMessagesCleared>(_onMessagesCleared);
+    on<ChatLocalMessageAdded>(_onLocalMessageAdded);
+    on<ChatThreadWatchRequested>(_onThreadWatchRequested);
+    on<ChatMessagePlayedStatusUpdated>(_onMessagePlayedStatusUpdated);
+  }
+
+  /// Handle sending a message (Observable pattern)
+  Future<void> _onMessageSent(
+    ChatMessageSent event,
+    Emitter<ChatState> emit,
+  ) async {
+    // Get current messages
+    List<ChatMessage> currentMessages = [];
+    String? currentThreadId = event.threadId;
+    
+    if (state is ChatLoaded) {
+      final loaded = state as ChatLoaded;
+      currentMessages = List.from(loaded.messages);
+      currentThreadId = loaded.threadId ?? currentThreadId;
+    }
+
+    // Add user message immediately
+    final userMessage = ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: event.message,
+      type: 'user',
+    );
+    currentMessages.add(userMessage);
+    
+    // Save user message to cache immediately (triggers stream)
+    if (currentThreadId != null) {
+      await _cacheService.cacheMessages(currentMessages, currentThreadId);
+    }
+
+    // Show loading state
+    if (state is ChatLoaded) {
+      emit((state as ChatLoaded).copyWith(isGenerating: true));
+    }
+
+    try {
+      // Call backend
+      final response = await _backendApi.invokeAgent(
+        message: event.message,
+        threadId: currentThreadId,
+        model: 'claude-sonnet-4-0',
+        agentId: 'krsna-agent',
+      );
+
+      // Parse response
+      final aiContent = response['content'];
+      final aiData = jsonDecode(aiContent);
+      final krishnaResponse = aiData['response'];
+      final followUps = (aiData['follow_ups'] as List?)?.cast<String>() ?? [];
+
+      // Store thread ID if new
+      final isNewThread = currentThreadId == null;
+      if (isNewThread && response['thread_id'] != null) {
+        currentThreadId = response['thread_id'];
+        // Start watching the new thread
+        add(ChatThreadWatchRequested(currentThreadId!));
+      }
+
+      // Add AI message with isPlayed=false so TTS plays it
+      final aiMessage = ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: krishnaResponse,
+        type: 'ai',
+        speaker: 'Kṛṣṇa',
+        isPlayed: false, // Mark as unplayed so TTS will play it
+      );
+      currentMessages.add(aiMessage);
+
+      // Save to cache (this triggers the stream and updates UI)
+      if (currentThreadId != null) {
+        await _cacheService.cacheMessages(currentMessages, currentThreadId);
+        await _cacheService.saveThreadId(currentThreadId);
+      }
+      
+      // Update follow-up questions in state (stream handles messages)
+      if (state is ChatLoaded) {
+        emit((state as ChatLoaded).copyWith(
+          followUpQuestions: followUps,
+          isGenerating: false,
+        ));
+      }
+    } catch (e) {
+      emit(ChatError(e.toString().replaceAll('Exception: ', '')));
+      
+      // Restore previous state after error
+      await Future.delayed(const Duration(seconds: 2));
+      if (state is ChatLoaded) {
+        emit((state as ChatLoaded).copyWith(isGenerating: false));
+      }
+    }
+  }
+
+  /// Load conversation history (Observable pattern)
+  Future<void> _onHistoryRequested(
+    ChatHistoryRequested event,
+    Emitter<ChatState> emit,
+  ) async {
+    print('📜 ChatHistoryRequested for thread: ${event.threadId}');
+    
+    // Start watching the thread first (instant cache load)
+    print('👁️ Starting to watch thread: ${event.threadId}');
+    add(ChatThreadWatchRequested(event.threadId));
+    
+    // Then fetch fresh data from backend
+    try {
+      print('🌐 Fetching history from backend for thread: ${event.threadId}');
+      final history = await _backendApi.getHistory(event.threadId);
+      
+      final messages = (history['messages'] as List)
+          .map((msg) => ChatMessage.fromJson(msg))
+          .toList();
+
+      print('✅ Received ${messages.length} messages from backend');
+      
+      // Save to cache (this will trigger the stream and update UI)
+      await _cacheService.cacheMessages(messages, event.threadId);
+      print('💾 Cached ${messages.length} messages');
+    } catch (e) {
+      // If backend fails, cache will still show (if any)
+      print('⚠️ Failed to load history from backend: $e');
+      // Stream will handle showing cached data or empty state
+    }
+  }
+
+  /// Delete conversation history
+  Future<void> _onHistoryDeleted(
+    ChatHistoryDeleted event,
+    Emitter<ChatState> emit,
+  ) async {
+    emit(const ChatLoading(message: 'Clearing history...'));
+
+    try {
+      await _backendApi.deleteHistory(event.threadId);
+      
+      emit(const ChatLoaded(messages: []));
+    } catch (e) {
+      emit(ChatError('Failed to delete history: ${e.toString()}'));
+    }
+  }
+
+  /// Clear local messages
+  Future<void> _onMessagesCleared(
+    ChatMessagesCleared event,
+    Emitter<ChatState> emit,
+  ) async {
+    emit(const ChatLoaded(messages: []));
+  }
+
+  /// Add local message
+  Future<void> _onLocalMessageAdded(
+    ChatLocalMessageAdded event,
+    Emitter<ChatState> emit,
+  ) async {
+    List<ChatMessage> currentMessages = [];
+    String? currentThreadId;
+
+    if (state is ChatLoaded) {
+      final loaded = state as ChatLoaded;
+      currentMessages = List.from(loaded.messages);
+      currentThreadId = loaded.threadId;
+    }
+
+    final message = ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: event.content,
+      type: event.type,
+      speaker: event.type == 'ai' ? 'Kṛṣṇa' : null,
+    );
+
+    currentMessages.add(message);
+
+    emit(ChatLoaded(
+      messages: currentMessages,
+      threadId: currentThreadId,
+    ));
+  }
+  
+  /// Start watching a thread for changes (Observable pattern)
+  Future<void> _onThreadWatchRequested(
+    ChatThreadWatchRequested event,
+    Emitter<ChatState> emit,
+  ) async {
+    // Use emit.forEach to properly handle the stream
+    await emit.forEach<List<ChatMessage>>(
+      _cacheService.watchMessages(event.threadId),
+      onData: (messages) {
+        // Return new state whenever cache updates
+        // Preserve follow-up questions and isGenerating from previous state
+        return ChatLoaded(
+          messages: messages,
+          threadId: event.threadId,
+          followUpQuestions: state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : [],
+          isGenerating: state is ChatLoaded ? (state as ChatLoaded).isGenerating : false,
+        );
+      },
+      onError: (error, stackTrace) {
+        return ChatError('Stream error: ${error.toString()}');
+      },
+    );
+  }
+  
+  /// Update message played status (for TTS tracking)
+  Future<void> _onMessagePlayedStatusUpdated(
+    ChatMessagePlayedStatusUpdated event,
+    Emitter<ChatState> emit,
+  ) async {
+    // Update in cache (this will trigger the stream)
+    await _cacheService.updateMessagePlayedStatus(
+      event.messageId,
+      event.threadId,
+      event.isPlayed,
+    );
+  }
+}
+

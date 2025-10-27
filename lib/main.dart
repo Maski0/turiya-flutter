@@ -1,18 +1,33 @@
-import 'dart:convert';
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:isar/isar.dart';
+import 'package:path_provider/path_provider.dart';
 import 'elevenlabs_service.dart';
 import 'audio_streamer.dart';
-import 'auth_service.dart';
 import 'services/backend_api_service.dart';
+import 'services/cache_service.dart';
+import 'models/cached_message.dart';
+import 'models/alignment_data.dart';
 import 'widgets/glass_button.dart';
 import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
+import 'widgets/chat_sidebar.dart';
+import 'widgets/menu_drawer.dart';
+import 'widgets/credits_display.dart';
+import 'widgets/subtitle_widget.dart';
 import 'blocs/auth/auth_bloc_export.dart';
+import 'blocs/chat/chat_bloc_export.dart';
+import 'blocs/credits/credits_bloc.dart';
+import 'blocs/memory/memory_bloc.dart';
+
+// Global cache service
+late final CacheService cacheService;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +44,14 @@ Future<void> main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   
+  // Initialize Isar for local caching
+  final dir = await getApplicationDocumentsDirectory();
+  final isar = await Isar.open(
+    [CachedMessageSchema, CachedThreadSchema],
+    directory: dir.path,
+  );
+  cacheService = CacheService(isar);
+  
   runApp(const ExampleApp());
 }
 
@@ -37,8 +60,13 @@ class ExampleApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => AuthBloc(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (context) => AuthBloc()),
+        BlocProvider(create: (context) => ChatBloc(cacheService: cacheService)),
+        BlocProvider(create: (context) => CreditsBloc()),
+        BlocProvider(create: (context) => MemoryBloc()),
+      ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -60,22 +88,36 @@ class _MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<_MainScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
+  final FocusNode _textFocusNode = FocusNode();
   final BackendApiService _backendApi = BackendApiService();
+  final ScrollController _scrollController = ScrollController();
   late AudioStreamer _audioStreamer;
   bool _isGenerating = false;
   bool _showLoginModal = false;
+  bool _showChatSidebar = false;
+  bool _showMenuDrawer = false;
+  bool _showChip = false; // Hidden by default, shows when chat opens
+  bool _isInInitialGracePeriod = false; // First 3s after opening chat
+  Timer? _chipAutoHideTimer; // Timer for auto-hiding the chip
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   String? _threadId; // Conversation thread ID
+  
+  // Subtitle state
+  AlignmentData? _currentAlignment;
+  bool _isAudioPlaying = false;
+  
+  // Track currently playing message to prevent duplicates
+  String? _currentlyPlayingMessageId;
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize ElevenLabs service with your API key and voice ID from environment
+    // Initialize ElevenLabs service to call backend TTS proxy (keeps API key secure)
     final elevenLabsService = ElevenLabsService(
-      apiKey: dotenv.env['ELEVENLABS_API_KEY'] ?? '',
-      voiceId: dotenv.env['ELEVENLABS_VOICE_ID'] ?? '',
+      backendUrl: BackendApiService.baseUrl,
+      getAuthToken: () => _backendApi.getAccessToken(),
     );
     _audioStreamer = AudioStreamer(elevenLabsService);
     
@@ -88,6 +130,113 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+
+    // Add scroll listener for chat overlay
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _startChipAutoHideTimer() {
+    // Cancel any existing timer
+    _chipAutoHideTimer?.cancel();
+    
+    // Start a new timer
+    _chipAutoHideTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _showChip = false;
+        });
+      }
+    });
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients || _isInInitialGracePeriod) return;
+    
+    final currentOffset = _scrollController.offset;
+    const showThreshold = 150.0; // Show chip when scrolled 150px from bottom
+    const hideThreshold = 20.0;  // Hide chip when within 20px of bottom
+    
+    // At bottom - hide chip
+    if (currentOffset <= hideThreshold) {
+      if (_showChip) {
+        setState(() {
+          _showChip = false;
+        });
+      }
+    }
+    // Scrolled significantly up - show chip
+    else if (currentOffset > showThreshold) {
+      if (!_showChip) {
+        setState(() {
+          _showChip = true;
+        });
+        _startChipAutoHideTimer();
+      }
+    }
+  }
+
+  void _startInitialGracePeriod() {
+    setState(() {
+      _isInInitialGracePeriod = true;
+    });
+    
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _isInInitialGracePeriod = false;
+        });
+      }
+    });
+  }
+  
+  Future<void> _loadLastThread() async {
+    try {
+      print('📥 Loading last thread...');
+      
+      // Try to get cached thread ID first (instant load)
+      final cachedThreadId = await cacheService.getLastThreadId();
+      print('💾 Cached thread ID: $cachedThreadId');
+      
+      // Query Supabase for the actual last thread
+      final user = supabase.Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        print('❌ No user logged in');
+        return;
+      }
+      
+      print('👤 User ID: ${user.id}');
+      const avatarId = '12a65bd0-d264-479d-a5a4-ce0bdabdbcf9'; // Krishna's avatar ID
+      
+      final response = await supabase.Supabase.instance.client
+          .from('threads')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('avatar_id', avatarId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      
+      print('🗄️ Supabase response: $response');
+      final threadId = response?['id'] as String? ?? cachedThreadId;
+      
+      if (threadId != null && mounted) {
+        print('✅ Found thread ID: $threadId');
+        setState(() {
+          _threadId = threadId;
+        });
+        
+        // This will:
+        // 1. Start watching the thread (loads cache instantly)
+        // 2. Fetch from backend (updates cache when done)
+        // 3. Stream auto-updates UI
+        print('📤 Dispatching ChatHistoryRequested for thread: $threadId');
+        context.read<ChatBloc>().add(ChatHistoryRequested(threadId));
+      } else {
+        print('❌ No thread ID found (Supabase: ${response?['id']}, Cache: $cachedThreadId)');
+      }
+    } catch (e) {
+      print('⚠️ Error loading last thread: $e');
+    }
   }
 
   void _toggleLoginModal() {
@@ -116,33 +265,173 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     
-    return BlocListener<AuthBloc, AuthState>(
-      listener: (context, state) {
-        if (state is AuthAuthenticated) {
-          // Close modal on successful auth
-          if (_showLoginModal) {
-            _toggleLoginModal();
-          }
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Welcome, ${state.user.email ?? "User"}!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        } else if (state is AuthError) {
-          // Show error message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to sign in: ${state.message}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      },
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<AuthBloc, AuthState>(
+          listener: (context, state) {
+            if (state is AuthAuthenticated) {
+              // Close modal on successful auth
+              if (_showLoginModal) {
+                _toggleLoginModal();
+              }
+              // Load user data
+              context.read<CreditsBloc>().add(const CreditsRequested());
+              
+              // Load last conversation
+              _loadLastThread();
+            } else if (state is AuthError) {
+              // Show error message
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to sign in: ${state.message}'),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 3),
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
+                ),
+              );
+            }
+          },
+        ),
+        BlocListener<ChatBloc, ChatState>(
+          listener: (context, state) async {
+            if (state is ChatLoaded) {
+              // Update thread ID
+              if (state.threadId != null) {
+                _threadId = state.threadId;
+              }
+              
+              // Reset generating flag when loading completes
+              if (_isGenerating && !state.isGenerating) {
+                _isGenerating = false;
+              }
+              
+              // Find any unplayed AI messages and play them
+              for (final message in state.messages) {
+                if (message.type == 'ai' && !message.isPlayed) {
+                  // Skip if we're already playing this message
+                  if (_currentlyPlayingMessageId == message.id) {
+                    print('⏭️ Skipping - already playing message ${message.id}');
+                    break;
+                  }
+                  
+                  print('✅ Krishna responded: ${message.content.substring(0, min(50, message.content.length))}...');
+                  print('🎵 Playing TTS for message ID: ${message.id}');
+                  
+                  // Mark this message as currently playing
+                  _currentlyPlayingMessageId = message.id;
+                  
+                  // Generate TTS with subtitles
+                  try {
+                    print('🎤 Generating TTS with timestamps...');
+                    print('📝 Text for TTS: "${message.content}"');
+                    print('📝 Text length: ${message.content.length} chars');
+                    
+                    // Clear previous alignment (but don't set isAudioPlaying yet to avoid blink)
+                    if (mounted) {
+                      setState(() {
+                        _currentAlignment = null;
+                        _isAudioPlaying = false;
+                      });
+                    }
+                    
+                    bool hasStartedPlaying = false;
+                    
+                    // Content is already parsed in ChatMessage.fromJson, use directly
+                    await _audioStreamer.streamToUnity(
+                      message.content,
+                      onAlignmentUpdate: (alignment) {
+                        // Update alignment data as chunks arrive
+                        // Set isAudioPlaying only on first chunk to avoid multiple blinks
+                        if (mounted) {
+                          setState(() {
+                            _currentAlignment = alignment;
+                            if (!hasStartedPlaying) {
+                              _isAudioPlaying = true;
+                              hasStartedPlaying = true;
+                            }
+                          });
+                        }
+                      },
+                    );
+                    print('✅ Audio sent to Unity with ${_currentAlignment?.characters.length ?? 0} characters');
+                    
+                    // Calculate actual audio duration from alignment data
+                    double audioDuration = 3.0; // Default fallback
+                    if (_currentAlignment != null && 
+                        _currentAlignment!.characterEndTimesSeconds.isNotEmpty) {
+                      // Get the end time of the last character
+                      audioDuration = _currentAlignment!.characterEndTimesSeconds.last;
+                      // Add a small buffer (0.5s) to ensure audio finishes
+                      audioDuration += 0.5;
+                      print('📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
+                    } else {
+                      print('⚠️ No alignment data, using default ${audioDuration}s duration');
+                    }
+                    
+                    // Mark message as played
+                    if (_threadId != null) {
+                      context.read<ChatBloc>().add(ChatMessagePlayedStatusUpdated(
+                        messageId: message.id,
+                        threadId: _threadId!,
+                        isPlayed: true,
+                      ));
+                      print('✅ Marked message ${message.id} as played');
+                    }
+                    
+                    // Clear the currently playing message ID
+                    _currentlyPlayingMessageId = null;
+                    
+                    // Stop showing subtitles after the actual audio duration
+                    Future.delayed(Duration(milliseconds: (audioDuration * 1000).toInt()), () {
+                      if (mounted) {
+                        setState(() {
+                          _isAudioPlaying = false;
+                          _currentAlignment = null; // Clear alignment data too
+                        });
+                        print('🔇 Subtitles hidden after ${audioDuration.toStringAsFixed(2)}s');
+                      }
+                    });
+                  } catch (e) {
+                    print('❌ TTS Error: $e');
+                    // Clear the currently playing message ID on error
+                    _currentlyPlayingMessageId = null;
+                    
+                    // Hide subtitles immediately on error
+                    if (mounted) {
+                      setState(() {
+                        _isAudioPlaying = false;
+                        _currentAlignment = null;
+                      });
+                    }
+                  }
+                  
+                  // Refresh credits after message sent
+                  context.read<CreditsBloc>().add(const CreditsRefreshed());
+                  
+                  // Only play one message at a time
+                  break;
+                }
+              }
+            } else if (state is ChatError) {
+              // Handle error and reset generating flag
+              if (_isGenerating) {
+                _isGenerating = false;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
+                  ),
+                );
+              }
+            }
+          },
+        ),
+      ],
       child: Scaffold(
+        backgroundColor: Colors.black,
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
@@ -162,50 +451,106 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Menu button
-                      GlassButton(
-                        onTap: () {
-                          // TODO: Open menu
+                      // Menu button (opens chat) - only when authenticated
+                      BlocBuilder<AuthBloc, AuthState>(
+                        builder: (context, state) {
+                          if (state is AuthAuthenticated) {
+                            return GlassButton(
+                              onTap: () {
+                                // Toggle chat sidebar
+                                if (_showChatSidebar) {
+                                  // Cancel timer when closing overlay
+                                  _chipAutoHideTimer?.cancel();
+                                  _animationController.reverse().then((_) {
+                                    if (mounted) {
+                                      setState(() {
+                                        _showChatSidebar = false;
+                                      });
+                                    }
+                                  });
+                                } else {
+                                  setState(() {
+                                    _showChatSidebar = true;
+                                    _showChip = false; // Start hidden
+                                  });
+                                  _animationController.forward();
+                                  // Show chip after overlay starts animating
+                                  Future.delayed(const Duration(milliseconds: 100), () {
+                                    if (mounted && _showChatSidebar) {
+                                      setState(() {
+                                        _showChip = true;
+                                      });
+                                      _startInitialGracePeriod(); // 3s grace period before scroll behavior
+                                      _startChipAutoHideTimer(); // Start fresh 5s timer
+                                    }
+                                  });
+                                }
+                              },
+                              child: const Icon(Icons.menu, color: Colors.white, size: 24),
+                            );
+                          }
+                          return const SizedBox.shrink();
                         },
-                        child: const Icon(Icons.menu, color: Colors.white, size: 24),
                       ),
-                      // Login button
-                      GlassButton(
-                        onTap: _toggleLoginModal,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.meeting_room, color: Colors.white, size: 20),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Login',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Right side - Credits and Login/Profile
+                      Row(
+                        children: [
+                          // Credits display (only when authenticated)
+                          BlocBuilder<AuthBloc, AuthState>(
+                            builder: (context, state) {
+                              if (state is AuthAuthenticated) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: CreditsDisplay(),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                          // Login/Profile button
+                          BlocBuilder<AuthBloc, AuthState>(
+                            builder: (context, state) {
+                              if (state is AuthAuthenticated) {
+                                return GlassButton(
+                                  onTap: () {
+                                    setState(() {
+                                      _showMenuDrawer = true;
+                                    });
+                                    _animationController.forward();
+                                  },
+                                  child: const Icon(
+                                    Icons.account_circle,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                );
+                              }
+                              return GlassButton(
+                                onTap: _toggleLoginModal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.meeting_room,
+                                        color: Colors.white, size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Login',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            
-            // Bottom input area
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: keyboardHeight,
-              child: BottomInputBar(
-                textController: _textController,
-                isGenerating: _isGenerating,
-                onSubmit: (value) => _generateAudio(value, context),
-                onMicTap: () {
-                  // TODO: Voice input
-                },
               ),
             ),
             
@@ -223,6 +568,147 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                   },
                 ),
               ),
+            
+            // Chat Sidebar
+            if (_showChatSidebar)
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: ChatSidebar(
+                  scrollController: _scrollController,
+                  onClose: () {
+                    _chipAutoHideTimer?.cancel(); // Cancel timer when closing
+                    _animationController.reverse().then((_) {
+                      setState(() {
+                        _showChatSidebar = false;
+                      });
+                    });
+                  },
+                  onFollowUpTap: (question) {
+                    _textController.text = question;
+                    _sendMessage(question, context);
+                  },
+                ),
+              ),
+            
+            // Bottom input area (always visible, below overlays)
+            Positioned(
+                left: 0,
+                right: 0,
+                bottom: keyboardHeight,
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // "Talk to Krishna" chip - only visible when chat is open
+                      AnimatedSlide(
+                      offset: (_showChip && _showChatSidebar) ? Offset.zero : const Offset(0, 2),
+                      duration: const Duration(milliseconds: 450),
+                      curve: Curves.easeOutBack,
+                      child: AnimatedOpacity(
+                        opacity: (_showChip && _showChatSidebar) ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () {
+                                // Close chip and chat overlay immediately
+                                _chipAutoHideTimer?.cancel(); // Cancel timer
+                                setState(() {
+                                  _showChip = false;
+                                });
+                                _animationController.reverse().then((_) {
+                                  if (mounted) {
+                                    setState(() {
+                                      _showChatSidebar = false;
+                                    });
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.white.withOpacity(0.2),
+                                      Colors.white.withOpacity(0.1),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Chevron back icon
+                                        Icon(
+                                          Icons.keyboard_arrow_down,
+                                          color: Colors.white.withOpacity(0.8),
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Talk to Kṛṣṇa',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.9),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    BottomInputBar(
+                      textController: _textController,
+                      focusNode: _textFocusNode,
+                      isGenerating: _isGenerating,
+                      onSubmit: (value) => _sendMessage(value, context),
+                      onMicTap: () {
+                        // TODO: Voice input
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Voice input coming soon!'),
+                            duration: Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Menu Drawer (Profile settings) - renders on top of input bar
+            if (_showMenuDrawer)
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: MenuDrawer(
+                  onClose: () {
+                    _animationController.reverse().then((_) {
+                      setState(() {
+                        _showMenuDrawer = false;
+                      });
+                    });
+                  },
+                ),
+              ),
+            
+            // Real-time subtitles - shows during audio playback
+            if (_isAudioPlaying && _currentAlignment != null)
+              SubtitleWidget(
+                alignment: _currentAlignment,
+                isPlaying: _isAudioPlaying,
+              ),
           ],
         ),
       ),
@@ -230,7 +716,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   }
 
 
-  Future<void> _generateAudio(String text, BuildContext context) async {
+  Future<void> _sendMessage(String text, BuildContext context) async {
     if (text.trim().isEmpty) return;
 
     // Check if user is authenticated
@@ -241,6 +727,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
           const SnackBar(
             content: Text('Please sign in to chat with Krishna'),
             backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
           ),
         );
         _toggleLoginModal();
@@ -252,81 +740,25 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       _isGenerating = true;
     });
 
-    try {
-      print('📨 Sending message to Krishna: $text');
-      
-      // 1. Call backend AI agent
-      final response = await _backendApi.invokeAgent(
-        message: text,
-        threadId: _threadId,
-        model: 'claude-3-5-sonnet-latest',
-        agentId: 'krsna-agent',
-      );
-      
-      // Store thread ID for conversation continuity
-      if (_threadId == null && response['thread_id'] != null) {
-        _threadId = response['thread_id'];
-        print('🧵 Thread ID: $_threadId');
-      }
-      
-      // Parse Krishna's response
-      final aiMessage = response['content'];
-      final aiData = jsonDecode(aiMessage);
-      final krishnaResponse = aiData['response'];
-      final followUps = aiData['follow_ups'] as List?;
-      
-      print('✅ Krishna responded: ${krishnaResponse.substring(0, 50)}...');
-      if (followUps != null) {
-        print('💡 Follow-ups: ${followUps.length}');
-      }
-      
-      // Clear input field
-      _textController.clear();
-      
-      // 2. Generate TTS from Krishna's response
-      print('🎤 Generating TTS...');
-      await _audioStreamer.streamToUnity(krishnaResponse);
-      
-      // 3. Show follow-up questions (optional - can be implemented later)
-      // TODO: Display followUps in UI for quick selection
-      
-      print('✅ Audio sent to Unity');
-      
-    } on Exception catch (e) {
-      print('❌ Error: $e');
-      
-      String errorMessage = 'Error: $e';
-      
-      // Handle specific errors
-      if (e.toString().contains('Authentication expired')) {
-        errorMessage = 'Session expired. Please sign in again.';
-        _toggleLoginModal();
-      } else if (e.toString().contains('Insufficient credits')) {
-        errorMessage = 'Insufficient credits. Please upgrade your plan.';
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-        });
-      }
-    }
+    // Clear input field immediately
+    _textController.clear();
+
+    print('📨 Sending message via ChatBloc: $text');
+    
+    // Send message via ChatBloc - the BlocListener will handle the response
+    context.read<ChatBloc>().add(ChatMessageSent(
+      message: text,
+      threadId: _threadId,
+    ));
   }
 
   @override
   void dispose() {
     _textController.dispose();
+    _textFocusNode.dispose();
+    _scrollController.dispose();
     _animationController.dispose();
+    _chipAutoHideTimer?.cancel(); // Cancel timer on dispose
     super.dispose();
   }
 }

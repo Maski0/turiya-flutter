@@ -27,7 +27,7 @@ class BackendApiService {
   Future<Map<String, dynamic>> invokeAgent({
     required String message,
     String? threadId,
-    String model = 'claude-3-5-sonnet-latest',
+    String model = 'claude-sonnet-4-0',
     String agentId = 'krsna-agent',
   }) async {
     final token = getAccessToken();
@@ -47,6 +47,9 @@ class BackendApiService {
         'model': model,
         'thread_id': threadId,
         'user_id': userId,
+        'agent_config': {
+          'spicy_level': 0.8,
+        },
       }),
     );
 
@@ -57,6 +60,18 @@ class BackendApiService {
       throw Exception('Authentication expired');
     } else if (response.statusCode == 402) {
       throw Exception('Insufficient credits');
+    } else if (response.statusCode == 422) {
+      // Validation error - log details
+      print('❌ 422 Validation Error');
+      print('Request body: ${jsonEncode({
+        'message': message,
+        'model': model,
+        'thread_id': threadId,
+        'user_id': userId,
+        'agent_config': {'spicy_level': 0.8},
+      })}');
+      print('Response: ${response.body}');
+      throw Exception('Validation error: ${response.body}');
     } else {
       throw Exception('API call failed: ${response.statusCode} - ${response.body}');
     }
@@ -66,7 +81,7 @@ class BackendApiService {
   Stream<String> streamAgent({
     required String message,
     String? threadId,
-    String model = 'claude-3-5-sonnet-latest',
+    String model = 'claude-sonnet-4-0',
     String agentId = 'krsna-agent',
   }) async* {
     final token = getAccessToken();
@@ -108,5 +123,130 @@ class BackendApiService {
   /// Sign out (handled by AuthService, but keeping for compatibility)
   Future<void> signOut() async {
     await _supabase.auth.signOut();
+  }
+
+  /// Get conversation history
+  Future<Map<String, dynamic>> getHistory(String threadId) async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/history'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'thread_id': threadId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get history: ${response.statusCode}');
+    }
+  }
+
+  /// Delete conversation history
+  Future<void> deleteHistory(String threadId) async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/deletethread'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'thread_id': threadId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete history: ${response.statusCode}');
+    }
+  }
+
+  /// Get user credits status
+  Future<Map<String, dynamic>> getCreditsStatus() async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/credits/status'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get credits: ${response.statusCode}');
+    }
+  }
+
+  /// List user memories
+  Future<List<Map<String, dynamic>>> listMemories() async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final userId = getUserId();
+    if (userId == null) throw Exception('User ID not found');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/list-memories'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'user_id': userId}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data['memories'] as List).cast<Map<String, dynamic>>();
+    } else {
+      throw Exception('Failed to list memories: ${response.statusCode}');
+    }
+  }
+
+  /// Delete a specific memory
+  Future<void> deleteMemory(String memoryId) async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/delete-memory'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'memory_id': memoryId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete memory: ${response.statusCode}');
+    }
+  }
+
+  /// Delete all memories
+  Future<void> deleteAllMemories() async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final userId = getUserId();
+    if (userId == null) throw Exception('User ID not found');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/delete-memories'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'user_id': userId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete all memories: ${response.statusCode}');
+    }
   }
 }

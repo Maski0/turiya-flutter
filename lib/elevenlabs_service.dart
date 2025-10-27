@@ -1,47 +1,89 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'models/alignment_data.dart';
 
 class ElevenLabsService {
-  final String apiKey;
-  final String voiceId;
+  final String backendUrl;
+  final String? Function() getAuthToken; // Function to get token dynamically
 
   ElevenLabsService({
-    required this.apiKey,
-    required this.voiceId,
+    required this.backendUrl,
+    required this.getAuthToken,
   });
 
-  /// Streams audio from ElevenLabs API in PCM format
-  /// Returns a stream of base64-encoded PCM audio chunks
-  Stream<String> streamTextToSpeech(String text) async* {
-    final url = Uri.parse(
-      'https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream?output_format=pcm_24000',
-    );
+  /// Streams audio with timestamps from backend TTS proxy
+  /// Backend handles ElevenLabs API call (API key stays secure on server)
+  Stream<AudioChunk> streamTextToSpeechWithTimestamps(String text) async* {
+    final url = Uri.parse('$backendUrl/tts-stream');
 
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Get auth token dynamically at call time
+    final authToken = getAuthToken();
+    if (authToken != null) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+
+    print('🎙️ TTS Request: $url with ${text.length} chars, auth=${authToken != null}');
+    
     final response = await http.Client().send(
       http.Request('POST', url)
-        ..headers.addAll({
-          'xi-api-key': apiKey,
-          'Content-Type': 'application/json',
-        })
+        ..headers.addAll(headers)
         ..body = jsonEncode({
           'text': text,
-          'model_id': 'eleven_turbo_v2_5',
-          'voice_settings': {
-            'stability': 0.5,
-            'similarity_boost': 0.75,
-          },
         }),
     );
 
+    print('🎙️ TTS Response: ${response.statusCode}');
+    
     if (response.statusCode != 200) {
       throw Exception('Failed to generate speech: ${response.statusCode}');
     }
 
-    // Stream the response in chunks
+    // Stream and parse JSON chunks
+    String buffer = '';
+    int totalBytes = 0;
+    int chunksParsed = 0;
     await for (final chunk in response.stream) {
-      // Encode chunk to base64
-      final base64Chunk = base64Encode(chunk);
-      yield base64Chunk;
+      totalBytes += chunk.length;
+      buffer += utf8.decode(chunk);
+      
+      // Split by newlines to get individual JSON objects
+      final lines = buffer.split('\n');
+      // Keep the last incomplete line in buffer
+      buffer = lines.removeLast();
+      
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        
+        try {
+          final json = jsonDecode(trimmed) as Map<String, dynamic>;
+          chunksParsed++;
+          print('📥 Parsed chunk $chunksParsed: ${json.keys}');
+          final audioChunk = AudioChunk.fromJson(json);
+          yield audioChunk;
+        } catch (e) {
+          print('⚠️ Failed to parse TTS chunk: $e');
+          print('⚠️ Line was: ${trimmed.substring(0, 100)}...');
+          // Continue processing other chunks
+        }
+      }
+    }
+    
+    print('✅ TTS stream complete: $totalBytes bytes, $chunksParsed chunks');
+    
+    // Process any remaining data in buffer
+    if (buffer.trim().isNotEmpty) {
+      try {
+        final json = jsonDecode(buffer.trim()) as Map<String, dynamic>;
+        final audioChunk = AudioChunk.fromJson(json);
+        yield audioChunk;
+      } catch (e) {
+        print('⚠️ Failed to parse final TTS chunk: $e');
+      }
     }
   }
 }

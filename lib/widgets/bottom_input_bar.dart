@@ -4,6 +4,7 @@ import 'animated_dots.dart';
 
 class BottomInputBar extends StatelessWidget {
   final TextEditingController textController;
+  final FocusNode? focusNode;
   final bool isGenerating;
   final Function(String) onSubmit;
   final VoidCallback onMicTap;
@@ -11,6 +12,7 @@ class BottomInputBar extends StatelessWidget {
   const BottomInputBar({
     super.key,
     required this.textController,
+    this.focusNode,
     required this.isGenerating,
     required this.onSubmit,
     required this.onMicTap,
@@ -41,6 +43,7 @@ class BottomInputBar extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: textController,
+                    focusNode: focusNode,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,

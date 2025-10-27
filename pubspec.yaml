@@ -19,6 +19,11 @@ dependencies:
   supabase_flutter: ^2.8.0
   flutter_secure_storage: ^9.0.0
   
+  # Local Database - Isar
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  path_provider: ^2.1.1
+  
   # State Management - BLoC
   flutter_bloc: ^8.1.3
   equatable: ^2.0.5
@@ -31,6 +36,10 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^5.0.0
+  
+  # Isar code generation
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.6
 
 
 flutter:

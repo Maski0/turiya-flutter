@@ -1,0 +1,1 @@
+flutter run 2>&1 | grep -v "libEGL\|EGL_emulation"
