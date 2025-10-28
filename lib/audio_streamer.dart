@@ -17,6 +17,7 @@ class AudioStreamer {
     
     try {
       // Send start signal to Unity
+      print('🎬 Sending START signal to Unity at ${DateTime.now()}');
       sendToUnity("Flutter", "OnAudioChunk", "START");
 
       int chunkCount = 0;
@@ -24,12 +25,15 @@ class AudioStreamer {
       // Stream audio chunks with timestamps from ElevenLabs
       await for (final audioChunk in elevenLabsService.streamTextToSpeechWithTimestamps(text)) {
         chunkCount++;
-        print('📦 Chunk $chunkCount: audioBase64=${audioChunk.audioBase64?.substring(0, 50)}..., hasAlignment=${audioChunk.bestAlignment != null}');
+        print('📦 Chunk $chunkCount received at ${DateTime.now()}: audioBase64=${audioChunk.audioBase64?.substring(0, 50)}..., hasAlignment=${audioChunk.bestAlignment != null}');
 
-        // Send audio to Unity if available
+        // Send audio to Unity immediately as it arrives
         if (audioChunk.audioBase64 != null && audioChunk.audioBase64!.isNotEmpty) {
-          print('🔊 Sending audio chunk to Unity (${audioChunk.audioBase64!.length} bytes)');
+          print('🔊 Sending audio chunk $chunkCount to Unity at ${DateTime.now()} (${audioChunk.audioBase64!.length} bytes)');
           sendToUnity("Flutter", "OnAudioChunk", "CHUNK|${audioChunk.audioBase64}");
+          if (chunkCount == 2) {
+            print('🎵 Unity should start playing after chunk 2');
+          }
         } else {
           print('⚠️ Chunk $chunkCount has no audio data');
         }

@@ -1480,18 +1480,23 @@ const CachedThreadSchema = CollectionSchema(
       name: r'avatarId',
       type: IsarType.string,
     ),
-    r'lastUpdated': PropertySchema(
+    r'followUpQuestions': PropertySchema(
       id: 1,
+      name: r'followUpQuestions',
+      type: IsarType.stringList,
+    ),
+    r'lastUpdated': PropertySchema(
+      id: 2,
       name: r'lastUpdated',
       type: IsarType.dateTime,
     ),
     r'threadId': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'threadId',
       type: IsarType.string,
     ),
     r'userId': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'userId',
       type: IsarType.string,
     )
@@ -1536,6 +1541,18 @@ int _cachedThreadEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  {
+    final list = object.followUpQuestions;
+    if (list != null) {
+      bytesCount += 3 + list.length * 3;
+      {
+        for (var i = 0; i < list.length; i++) {
+          final value = list[i];
+          bytesCount += value.length * 3;
+        }
+      }
+    }
+  }
   bytesCount += 3 + object.threadId.length * 3;
   {
     final value = object.userId;
@@ -1553,9 +1570,10 @@ void _cachedThreadSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.avatarId);
-  writer.writeDateTime(offsets[1], object.lastUpdated);
-  writer.writeString(offsets[2], object.threadId);
-  writer.writeString(offsets[3], object.userId);
+  writer.writeStringList(offsets[1], object.followUpQuestions);
+  writer.writeDateTime(offsets[2], object.lastUpdated);
+  writer.writeString(offsets[3], object.threadId);
+  writer.writeString(offsets[4], object.userId);
 }
 
 CachedThread _cachedThreadDeserialize(
@@ -1566,10 +1584,11 @@ CachedThread _cachedThreadDeserialize(
 ) {
   final object = CachedThread();
   object.avatarId = reader.readStringOrNull(offsets[0]);
+  object.followUpQuestions = reader.readStringList(offsets[1]);
   object.id = id;
-  object.lastUpdated = reader.readDateTime(offsets[1]);
-  object.threadId = reader.readString(offsets[2]);
-  object.userId = reader.readStringOrNull(offsets[3]);
+  object.lastUpdated = reader.readDateTime(offsets[2]);
+  object.threadId = reader.readString(offsets[3]);
+  object.userId = reader.readStringOrNull(offsets[4]);
   return object;
 }
 
@@ -1583,10 +1602,12 @@ P _cachedThreadDeserializeProp<P>(
     case 0:
       return (reader.readStringOrNull(offset)) as P;
     case 1:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readStringList(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 3:
+      return (reader.readString(offset)) as P;
+    case 4:
       return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1938,6 +1959,251 @@ extension CachedThreadQueryFilter
         property: r'avatarId',
         value: '',
       ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'followUpQuestions',
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'followUpQuestions',
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'followUpQuestions',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'followUpQuestions',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'followUpQuestions',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'followUpQuestions',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'followUpQuestions',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<CachedThread, CachedThread, QAfterFilterCondition>
+      followUpQuestionsLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followUpQuestions',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
     });
   }
 
@@ -2471,6 +2737,13 @@ extension CachedThreadQueryWhereDistinct
     });
   }
 
+  QueryBuilder<CachedThread, CachedThread, QDistinct>
+      distinctByFollowUpQuestions() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'followUpQuestions');
+    });
+  }
+
   QueryBuilder<CachedThread, CachedThread, QDistinct> distinctByLastUpdated() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lastUpdated');
@@ -2503,6 +2776,13 @@ extension CachedThreadQueryProperty
   QueryBuilder<CachedThread, String?, QQueryOperations> avatarIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'avatarId');
+    });
+  }
+
+  QueryBuilder<CachedThread, List<String>?, QQueryOperations>
+      followUpQuestionsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'followUpQuestions');
     });
   }
 

@@ -6,16 +6,20 @@ class BottomInputBar extends StatelessWidget {
   final TextEditingController textController;
   final FocusNode? focusNode;
   final bool isGenerating;
+  final bool isRecording;
   final Function(String) onSubmit;
   final VoidCallback onMicTap;
+  final VoidCallback? onMicLongPress;
 
   const BottomInputBar({
     super.key,
     required this.textController,
     this.focusNode,
     required this.isGenerating,
+    this.isRecording = false,
     required this.onSubmit,
     required this.onMicTap,
+    this.onMicLongPress,
   });
 
   @override
@@ -64,22 +68,43 @@ class BottomInputBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Mic button (filled)
+                // Mic button (with recording indicator)
                 GestureDetector(
                   onTap: onMicTap,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.mic,
-                      color: Colors.white.withOpacity(0.8),
-                      size: 24,
-                    ),
+                  onLongPress: onMicLongPress,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Pulsing circle when recording
+                      if (isRecording)
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                      // Mic icon
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          isRecording ? Icons.mic : Icons.mic_none,
+                          color: isRecording 
+                              ? Colors.red 
+                              : Colors.white.withOpacity(0.8),
+                          size: 24,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Send button (arrow)
+                // Send button (arrow) - disabled when recording
                 GestureDetector(
-                  onTap: isGenerating ? null : () => onSubmit(textController.text),
+                  onTap: (isGenerating || isRecording) 
+                      ? null 
+                      : () => onSubmit(textController.text),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: isGenerating
@@ -89,7 +114,9 @@ class BottomInputBar extends StatelessWidget {
                           )
                         : Icon(
                             Icons.arrow_forward,
-                            color: Colors.white.withOpacity(0.8),
+                            color: (isRecording)
+                                ? Colors.white.withOpacity(0.3)
+                                : Colors.white.withOpacity(0.8),
                             size: 24,
                           ),
                   ),

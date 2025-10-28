@@ -81,14 +81,15 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
       return;
     }
 
-    // Add a small delay (~200ms) to account for Unity audio processing/buffering
-    // This helps sync the subtitles with the actual audio playback
-    Future.delayed(const Duration(milliseconds: 200), () {
+    // Minimal delay for Unity audio start (it plays immediately after END signal)
+    print('⏰ Subtitle timer starting with minimal delay at ${DateTime.now()}');
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (!mounted || !widget.isPlaying) return;
       
-      // Start timing from now
+      // Start subtitle timer
       _playbackStartTime = DateTime.now();
       _currentTime = 0.0;
+      print('▶️ Subtitles active at ${DateTime.now()}');
 
       // Update text at 60 FPS (similar to requestAnimationFrame)
       _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {

@@ -4,6 +4,10 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>To show Unity in AR</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access to convert your speech to text</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app needs speech recognition permission to convert your speech to text</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

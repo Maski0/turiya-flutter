@@ -19,12 +19,14 @@ import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/menu_drawer.dart';
-import 'widgets/credits_display.dart';
 import 'widgets/subtitle_widget.dart';
+import 'widgets/profile_avatar_widget.dart';
 import 'blocs/auth/auth_bloc_export.dart';
 import 'blocs/chat/chat_bloc_export.dart';
 import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 
 // Global cache service
 late final CacheService cacheService;
@@ -92,16 +94,22 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   final BackendApiService _backendApi = BackendApiService();
   final ScrollController _scrollController = ScrollController();
   late AudioStreamer _audioStreamer;
+  late stt.SpeechToText _speechToText;
   bool _isGenerating = false;
   bool _showLoginModal = false;
   bool _showChatSidebar = false;
   bool _showMenuDrawer = false;
   bool _showChip = false; // Hidden by default, shows when chat opens
   bool _isInInitialGracePeriod = false; // First 3s after opening chat
+  bool _isRecording = false;
   Timer? _chipAutoHideTimer; // Timer for auto-hiding the chip
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   String? _threadId; // Conversation thread ID
+  List<String> _previousFollowUps = []; // Track previous follow-ups for animation
+  bool _showFollowUps = false; // Control fade-in animation
+  String? _lastUserMessage; // Track last sent message
+  bool _showUserMessageBubble = false; // Control user message bubble visibility
   
   // Subtitle state
   AlignmentData? _currentAlignment;
@@ -120,6 +128,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       getAuthToken: () => _backendApi.getAccessToken(),
     );
     _audioStreamer = AudioStreamer(elevenLabsService);
+    
+    // Initialize speech to text
+    _speechToText = stt.SpeechToText();
     
     // Initialize animation controller for smooth transitions
     _animationController = AnimationController(
@@ -301,10 +312,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 _threadId = state.threadId;
               }
               
-              // Reset generating flag when loading completes
-              if (_isGenerating && !state.isGenerating) {
-                _isGenerating = false;
-              }
+              // Don't reset generating flag here - keep it until audio finishes
+              // (It will be reset after audio playback completes)
               
               // Find any unplayed AI messages and play them
               for (final message in state.messages) {
@@ -335,26 +344,29 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       });
                     }
                     
-                    bool hasStartedPlaying = false;
-                    
                     // Content is already parsed in ChatMessage.fromJson, use directly
                     await _audioStreamer.streamToUnity(
                       message.content,
                       onAlignmentUpdate: (alignment) {
-                        // Update alignment data as chunks arrive
-                        // Set isAudioPlaying only on first chunk to avoid multiple blinks
+                        // Update alignment data as chunks arrive (but don't start audio playback yet)
                         if (mounted) {
                           setState(() {
                             _currentAlignment = alignment;
-                            if (!hasStartedPlaying) {
-                              _isAudioPlaying = true;
-                              hasStartedPlaying = true;
-                            }
                           });
                         }
                       },
                     );
                     print('✅ Audio sent to Unity with ${_currentAlignment?.characters.length ?? 0} characters');
+                    print('🎵 All audio chunks sent - Unity should be playing NOW');
+                    
+                    // NOW start audio playback - Unity has received all chunks and END signal
+                    if (mounted) {
+                      setState(() {
+                        _isAudioPlaying = true;
+                        _showFollowUps = false; // Hide follow-ups when audio starts
+                      });
+                      print('🔊 Set _isAudioPlaying = true at ${DateTime.now()}');
+                    }
                     
                     // Calculate actual audio duration from alignment data
                     double audioDuration = 3.0; // Default fallback
@@ -383,13 +395,39 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     _currentlyPlayingMessageId = null;
                     
                     // Stop showing subtitles after the actual audio duration
-                    Future.delayed(Duration(milliseconds: (audioDuration * 1000).toInt()), () {
+                    Future.delayed(Duration(milliseconds: (audioDuration * 1000).toInt()), () async {
                       if (mounted) {
                         setState(() {
                           _isAudioPlaying = false;
                           _currentAlignment = null; // Clear alignment data too
+                          _isGenerating = false; // Reset generating state after audio finishes
                         });
                         print('🔇 Subtitles hidden after ${audioDuration.toStringAsFixed(2)}s');
+                        print('✅ Reset _isGenerating = false (audio finished)');
+                        
+                        // Fade out user message bubble
+                        if (_showUserMessageBubble) {
+                          setState(() {
+                            _showUserMessageBubble = false;
+                          });
+                          
+                          // Wait for fade-out, then fade in follow-ups
+                          await Future.delayed(const Duration(milliseconds: 400));
+                          
+                          // Trigger follow-up animations
+                          if (state.followUpQuestions.isNotEmpty) {
+                            _previousFollowUps = state.followUpQuestions;
+                            _showFollowUps = false;
+                            // Small delay before fade-in
+                            Future.delayed(const Duration(milliseconds: 50), () {
+                              if (mounted) {
+                                setState(() {
+                                  _showFollowUps = true;
+                                });
+                              }
+                            });
+                          }
+                        }
                       }
                     });
                   } catch (e) {
@@ -402,6 +440,17 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       setState(() {
                         _isAudioPlaying = false;
                         _currentAlignment = null;
+                        _showUserMessageBubble = false; // Hide user message on error
+                        _isGenerating = false; // Reset generating state on error
+                      });
+                      
+                      // Show follow-ups after a delay
+                      Future.delayed(const Duration(milliseconds: 400), () {
+                        if (state.followUpQuestions.isNotEmpty && mounted) {
+                          setState(() {
+                            _showFollowUps = true;
+                          });
+                        }
                       });
                     }
                   }
@@ -455,7 +504,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       BlocBuilder<AuthBloc, AuthState>(
                         builder: (context, state) {
                           if (state is AuthAuthenticated) {
-                            return GlassButton(
+                            return GestureDetector(
                               onTap: () {
                                 // Toggle chat sidebar
                                 if (_showChatSidebar) {
@@ -486,67 +535,69 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                   });
                                 }
                               },
-                              child: const Icon(Icons.menu, color: Colors.white, size: 24),
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.3),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.menu,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
                             );
                           }
                           return const SizedBox.shrink();
                         },
                       ),
-                      // Right side - Credits and Login/Profile
-                      Row(
-                        children: [
-                          // Credits display (only when authenticated)
-                          BlocBuilder<AuthBloc, AuthState>(
-                            builder: (context, state) {
-                              if (state is AuthAuthenticated) {
-                                return const Padding(
-                                  padding: EdgeInsets.only(right: 12),
-                                  child: CreditsDisplay(),
-                                );
-                              }
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                          // Login/Profile button
-                          BlocBuilder<AuthBloc, AuthState>(
-                            builder: (context, state) {
-                              if (state is AuthAuthenticated) {
-                                return GlassButton(
-                                  onTap: () {
-                                    setState(() {
-                                      _showMenuDrawer = true;
-                                    });
-                                    _animationController.forward();
-                                  },
-                                  child: const Icon(
-                                    Icons.account_circle,
+                      // Right side - Profile or Login
+                      BlocBuilder<AuthBloc, AuthState>(
+                        builder: (context, state) {
+                          if (state is AuthAuthenticated) {
+                            return ProfileAvatarWidget(
+                              onTap: () {
+                                setState(() {
+                                  _showMenuDrawer = true;
+                                });
+                                _animationController.forward();
+                              },
+                            );
+                          }
+                          return GlassButton(
+                            onTap: _toggleLoginModal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.meeting_room,
+                                    color: Colors.white, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Login',
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    size: 24,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                );
-                              }
-                              return GlassButton(
-                                onTap: _toggleLoginModal,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Icon(Icons.meeting_room,
-                                        color: Colors.white, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Login',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
                                 ),
-                              );
-                            },
-                          ),
-                        ],
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -599,16 +650,109 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Follow-up questions chips (horizontal scroll)
+                      BlocBuilder<ChatBloc, ChatState>(
+                        builder: (context, state) {
+                          if (state is ChatLoaded && 
+                              state.followUpQuestions.isNotEmpty && 
+                              !_showChatSidebar) {
+                            // Detect new follow-ups
+                            if (_previousFollowUps != state.followUpQuestions) {
+                              _previousFollowUps = state.followUpQuestions;
+                              // Only show immediately if we're not currently processing a message
+                              // (i.e., no user message bubble showing and not generating)
+                              if (!_showUserMessageBubble && !state.isGenerating && !_isAudioPlaying) {
+                                _showFollowUps = false;
+                                Future.delayed(const Duration(milliseconds: 50), () {
+                                  if (mounted && !_showUserMessageBubble && !_isAudioPlaying) {
+                                    setState(() {
+                                      _showFollowUps = true;
+                                    });
+                                  }
+                                });
+                              }
+                            }
+                            return AnimatedOpacity(
+                              opacity: _showFollowUps ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 400),
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: SizedBox(
+                                  height: 36,
+                                  child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                itemCount: state.followUpQuestions.length,
+                                itemBuilder: (context, index) {
+                                  final question = state.followUpQuestions[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        // Fade out chips first
+                                        setState(() {
+                                          _showFollowUps = false;
+                                        });
+                                        // Wait for fade-out animation
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        _textController.text = question;
+                                        _sendMessage(question, context);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.white.withOpacity(0.2),
+                                              Colors.white.withOpacity(0.1),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(18),
+                                          border: Border.all(
+                                            color: Colors.white.withOpacity(0.3),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          question,
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.9),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            ),
+                            );
+                          } else {
+                            // Reset animation state when follow-ups are gone
+                            if (_previousFollowUps.isNotEmpty) {
+                              _previousFollowUps = [];
+                              _showFollowUps = false;
+                            }
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
                       // "Talk to Krishna" chip - only visible when chat is open
-                      AnimatedSlide(
-                      offset: (_showChip && _showChatSidebar) ? Offset.zero : const Offset(0, 2),
-                      duration: const Duration(milliseconds: 450),
-                      curve: Curves.easeOutBack,
-                      child: AnimatedOpacity(
-                        opacity: (_showChip && _showChatSidebar) ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
+                      if (_showChip && _showChatSidebar)
+                        AnimatedSlide(
+                        offset: Offset.zero,
+                        duration: const Duration(milliseconds: 450),
+                        curve: Curves.easeOutBack,
+                        child: AnimatedOpacity(
+                          opacity: 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
                           child: Center(
                             child: GestureDetector(
                               onTap: () {
@@ -670,18 +814,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       textController: _textController,
                       focusNode: _textFocusNode,
                       isGenerating: _isGenerating,
+                      isRecording: _isRecording,
                       onSubmit: (value) => _sendMessage(value, context),
-                      onMicTap: () {
-                        // TODO: Voice input
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Voice input coming soon!'),
-                            duration: Duration(seconds: 2),
-                            behavior: SnackBarBehavior.floating,
-                            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-                          ),
-                        );
-                      },
+                      onMicTap: _toggleListening,
                     ),
                   ],
                 ),
@@ -703,6 +838,31 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 ),
               ),
             
+            // User message - shows at top right after sending
+            if (_showUserMessageBubble && _lastUserMessage != null)
+              Positioned(
+                top: 100,
+                right: 20,
+                left: 20,
+                child: AnimatedOpacity(
+                  opacity: _showUserMessageBubble ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Text(
+                      _lastUserMessage!,
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 16,
+                        height: 1.5,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            
             // Real-time subtitles - shows during audio playback
             if (_isAudioPlaying && _currentAlignment != null)
               SubtitleWidget(
@@ -715,6 +875,101 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     );
   }
 
+
+  Future<void> _startListening() async {
+    // Request microphone permission
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission required'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
+          ),
+        );
+      }
+      return;
+    }
+
+    bool available = await _speechToText.initialize(
+      onError: (error) {
+        print('❌ STT Error: $error');
+        if (mounted) {
+          setState(() {
+            _isRecording = false;
+          });
+        }
+      },
+      onStatus: (status) {
+        print('🎤 STT Status: $status');
+        if (status == 'done' || status == 'notListening') {
+          if (mounted && _isRecording) {
+            setState(() {
+              _isRecording = false;
+            });
+          }
+        }
+      },
+    );
+
+    if (available) {
+      setState(() {
+        _isRecording = true;
+        _textController.clear();
+      });
+
+      await _speechToText.listen(
+        onResult: (result) {
+          setState(() {
+            _textController.text = result.recognizedWords;
+          });
+        },
+        listenMode: stt.ListenMode.confirmation,
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Speech recognition not available'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopListening() async {
+    await _speechToText.stop();
+    setState(() {
+      _isRecording = false;
+    });
+    
+    // Auto-submit if we have text
+    if (_textController.text.trim().isNotEmpty) {
+      _sendMessage(_textController.text, context);
+    }
+  }
+
+  Future<void> _toggleListening() async {
+    // Check if user is authenticated
+    final isAuthenticated = await _backendApi.isAuthenticated();
+    if (!isAuthenticated) {
+      if (mounted) {
+        _toggleLoginModal();
+      }
+      return;
+    }
+    
+    if (_isRecording) {
+      _stopListening();
+    } else {
+      _startListening();
+    }
+  }
 
   Future<void> _sendMessage(String text, BuildContext context) async {
     if (text.trim().isEmpty) return;
@@ -738,6 +993,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
 
     setState(() {
       _isGenerating = true;
+      _lastUserMessage = text;
+      _showUserMessageBubble = true;
+      _showFollowUps = false; // Hide follow-ups when sending message
     });
 
     // Clear input field immediately

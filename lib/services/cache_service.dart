@@ -29,7 +29,7 @@ class CacheService {
   }
   
   /// Cache messages for a thread (This triggers the stream)
-  Future<void> cacheMessages(List<ChatMessage> messages, String threadId) async {
+  Future<void> cacheMessages(List<ChatMessage> messages, String threadId, {List<String>? followUpQuestions}) async {
     await isar.writeTxn(() async {
       // Delete old messages for this thread first
       final oldMessages = await isar.cachedMessages
@@ -54,13 +54,24 @@ class CacheService {
       if (thread == null) {
         thread = CachedThread()
           ..threadId = threadId
-          ..lastUpdated = DateTime.now();
+          ..lastUpdated = DateTime.now()
+          ..followUpQuestions = followUpQuestions;
       } else {
         thread.lastUpdated = DateTime.now();
+        thread.followUpQuestions = followUpQuestions;
       }
       
       await isar.cachedThreads.put(thread);
     });
+  }
+  
+  /// Get cached follow-up questions for a thread
+  Future<List<String>> getFollowUpQuestions(String threadId) async {
+    final thread = await isar.cachedThreads.filter()
+        .threadIdEqualTo(threadId)
+        .findFirst();
+    
+    return thread?.followUpQuestions ?? [];
   }
   
   /// Get cached messages once (for compatibility)

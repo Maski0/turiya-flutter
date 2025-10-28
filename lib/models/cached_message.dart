@@ -43,5 +43,8 @@ class CachedThread {
   
   String? userId;
   String? avatarId;
+  
+  // Store follow-up questions for this thread
+  List<String>? followUpQuestions;
 }
 
