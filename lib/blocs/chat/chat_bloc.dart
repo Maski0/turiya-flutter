@@ -49,13 +49,21 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     currentMessages.add(userMessage);
     
     // Save user message to cache immediately (triggers stream)
+    // Also clear old follow-ups from cache
     if (currentThreadId != null) {
-      await _cacheService.cacheMessages(currentMessages, currentThreadId);
+      await _cacheService.cacheMessages(
+        currentMessages, 
+        currentThreadId,
+        followUpQuestions: [], // Clear old follow-ups when sending new message
+      );
     }
 
-    // Show loading state
+    // Show loading state and clear old follow-ups
     if (state is ChatLoaded) {
-      emit((state as ChatLoaded).copyWith(isGenerating: true));
+      emit((state as ChatLoaded).copyWith(
+        isGenerating: true,
+        followUpQuestions: [], // Clear old follow-ups when starting new message
+      ));
     }
 
     try {
@@ -116,10 +124,13 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     } catch (e) {
       emit(ChatError(e.toString().replaceAll('Exception: ', '')));
       
-      // Restore previous state after error
+      // Restore previous state after error (keep follow-ups cleared)
       await Future.delayed(const Duration(seconds: 2));
       if (state is ChatLoaded) {
-        emit((state as ChatLoaded).copyWith(isGenerating: false));
+        emit((state as ChatLoaded).copyWith(
+          isGenerating: false,
+          followUpQuestions: [], // Keep follow-ups cleared after error
+        ));
       }
     }
   }

@@ -12,7 +12,7 @@ class AuthService {
       // Start OAuth flow with custom scheme (must be added to Supabase Dashboard!)
       final bool success = await _supabase.auth.signInWithOAuth(
         supabase.OAuthProvider.google,
-        redirectTo: 'com.turiya.now://login-callback',  // Custom scheme for mobile
+        redirectTo: 'turiya://login-callback',  // Simpler custom scheme (works better on Android)
         authScreenLaunchMode: supabase.LaunchMode.externalApplication,
       );
 

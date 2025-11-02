@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 import '../blocs/credits/credits_bloc.dart';
 import '../blocs/memory/memory_bloc.dart';
+import '../utils/toast_utils.dart';
 import 'memory_screen.dart';
 
 class MenuDrawer extends StatelessWidget {
@@ -38,26 +39,14 @@ class MenuDrawer extends StatelessWidget {
         icon: Icons.settings,
         title: 'Settings',
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Settings coming soon'),
-              behavior: SnackBarBehavior.floating,
-              margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-            ),
-          );
+          ToastUtils.showInfo(context, 'Settings coming soon');
         },
       ),
       _MenuOption(
         icon: Icons.help_outline,
         title: 'Help & Support',
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Help & Support coming soon'),
-              behavior: SnackBarBehavior.floating,
-              margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-            ),
-          );
+          ToastUtils.showInfo(context, 'Help & Support coming soon');
         },
       ),
       _MenuOption(
@@ -74,7 +63,7 @@ class MenuDrawer extends StatelessWidget {
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
       child: Container(
-        color: Colors.transparent,
+        color: Colors.black.withOpacity(0.3), // Dark overlay for better visibility
         child: Stack(
           children: [
             // Menu options centered
@@ -199,7 +188,6 @@ class MenuDrawer extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
                               ],
                             );
                           }
@@ -264,7 +252,7 @@ class MenuDrawer extends StatelessWidget {
             ),
             // Close menu chip fixed at bottom
             Positioned(
-              bottom: 20,
+              bottom: 60,
               left: 0,
               right: 0,
               child: Center(

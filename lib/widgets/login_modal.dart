@@ -21,7 +21,7 @@ class LoginModal extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          color: Colors.transparent,
+          color: Colors.black.withOpacity(0.1), // Dark overlay for better blur visibility
           child: Center(
             child: GestureDetector(
               onTap: () {}, // Prevent closing when tapping the modal content
@@ -128,8 +128,7 @@ class LoginModal extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     if (isSigningIn)
-                                      AnimatedDots(
-                                        color: Colors.black87,
+                                      const AnimatedDots(
                                         size: 5.0,
                                       )
                                     else

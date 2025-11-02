@@ -27,6 +27,7 @@ import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
+import 'utils/toast_utils.dart';
 
 // Global cache service
 late final CacheService cacheService;
@@ -290,17 +291,42 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               
               // Load last conversation
               _loadLastThread();
+            } else if (state is AuthUnauthenticated) {
+              // User signed out - clear all chat data
+              context.read<ChatBloc>().add(const ChatMessagesCleared());
+              
+              // Reset local state
+              setState(() {
+                _threadId = null;
+                _showFollowUps = false;
+                _previousFollowUps = [];
+                _isGenerating = false;
+                _showUserMessageBubble = false;
+                _currentAlignment = null;
+                _isAudioPlaying = false;
+                _currentlyPlayingMessageId = null;
+              });
+              
+              // Close menu drawer if open
+              if (_showMenuDrawer) {
+                _animationController.reverse().then((_) {
+                  if (mounted) {
+                    setState(() {
+                      _showMenuDrawer = false;
+                    });
+                  }
+                });
+              }
+              
+              // Close chat sidebar if open
+              if (_showChatSidebar) {
+                setState(() {
+                  _showChatSidebar = false;
+                });
+              }
             } else if (state is AuthError) {
               // Show error message
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to sign in: ${state.message}'),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                  behavior: SnackBarBehavior.floating,
-                  margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
-                ),
-              );
+              ToastUtils.showError(context, 'Failed to sign in: ${state.message}');
             }
           },
         ),
@@ -363,9 +389,11 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     if (mounted) {
                       setState(() {
                         _isAudioPlaying = true;
+                        _isGenerating = false; // Stop showing "Pondering...", now showing "Narrating..."
                         _showFollowUps = false; // Hide follow-ups when audio starts
                       });
                       print('🔊 Set _isAudioPlaying = true at ${DateTime.now()}');
+                      print('✅ Set _isGenerating = false (audio started)');
                     }
                     
                     // Calculate actual audio duration from alignment data
@@ -466,22 +494,47 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               // Handle error and reset generating flag
               if (_isGenerating) {
                 _isGenerating = false;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.message),
-                    backgroundColor: Colors.red,
-                    behavior: SnackBarBehavior.floating,
-                    margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
-                  ),
-                );
+                ToastUtils.showError(context, state.message);
               }
             }
           },
         ),
       ],
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        resizeToAvoidBottomInset: false,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, dynamic result) {
+          if (didPop) return;
+          
+          final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+          final hasFocus = _textFocusNode.hasFocus;
+          print('🔙 Back pressed: keyboard=$keyboardHeight, hasFocus=$hasFocus, modal=$_showLoginModal, sidebar=$_showChatSidebar');
+          
+          // Check if keyboard is open (either by height or focus)
+          if (keyboardHeight > 0 || hasFocus) {
+            // Keyboard is open or text field has focus, dismiss it forcefully
+            print('⌨️ Dismissing keyboard...');
+            FocusScope.of(context).unfocus();
+            _textFocusNode.unfocus();
+            // Force hide keyboard using platform channel
+            SystemChannels.textInput.invokeMethod('TextInput.hide');
+          } else if (_showLoginModal) {
+            // Close login modal if open
+            _toggleLoginModal();
+          } else if (_showChatSidebar) {
+            // Close chat sidebar if open
+            setState(() {
+              _showChatSidebar = false;
+            });
+          } else {
+            // Nothing to close, allow back to exit app
+            // Show confirmation dialog or exit
+            // For now, do nothing (stay in app)
+            print('🏠 No action - staying in app');
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
             // Unity avatar - full screen background
@@ -554,7 +607,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                 ),
                                 child: const Center(
                                   child: Icon(
-                                    Icons.menu,
+                                    Icons.view_sidebar_outlined,
                                     color: Colors.white,
                                     size: 20,
                                   ),
@@ -604,21 +657,6 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 ),
               ),
             ),
-            
-            // Login Modal Overlay
-            if (_showLoginModal)
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: BlocBuilder<AuthBloc, AuthState>(
-                  builder: (context, state) {
-                    return LoginModal(
-                      onClose: _toggleLoginModal,
-                      onGoogleSignIn: _handleGoogleSignIn,
-                      isSigningIn: state is AuthLoading,
-                    );
-                  },
-                ),
-              ),
             
             // Chat Sidebar
             if (_showChatSidebar)
@@ -742,79 +780,12 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                           return const SizedBox.shrink();
                         },
                       ),
-                      // "Talk to Krishna" chip - only visible when chat is open
-                      if (_showChip && _showChatSidebar)
-                        AnimatedSlide(
-                        offset: Offset.zero,
-                        duration: const Duration(milliseconds: 450),
-                        curve: Curves.easeOutBack,
-                        child: AnimatedOpacity(
-                          opacity: 1.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                          child: Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                // Close chip and chat overlay immediately
-                                _chipAutoHideTimer?.cancel(); // Cancel timer
-                                setState(() {
-                                  _showChip = false;
-                                });
-                                _animationController.reverse().then((_) {
-                                  if (mounted) {
-                                    setState(() {
-                                      _showChatSidebar = false;
-                                    });
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.white.withOpacity(0.2),
-                                      Colors.white.withOpacity(0.1),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // Chevron back icon
-                                        Icon(
-                                          Icons.keyboard_arrow_down,
-                                          color: Colors.white.withOpacity(0.8),
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Talk to Kṛṣṇa',
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.9),
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                     BottomInputBar(
                       textController: _textController,
                       focusNode: _textFocusNode,
                       isGenerating: _isGenerating,
                       isRecording: _isRecording,
+                      isAudioPlaying: _isAudioPlaying,
                       onSubmit: (value) => _sendMessage(value, context),
                       onMicTap: _toggleListening,
                     ),
@@ -834,6 +805,21 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                         _showMenuDrawer = false;
                       });
                     });
+                  },
+                ),
+              ),
+            
+            // Login Modal Overlay - renders on top of input bar
+            if (_showLoginModal)
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: BlocBuilder<AuthBloc, AuthState>(
+                  builder: (context, state) {
+                    return LoginModal(
+                      onClose: _toggleLoginModal,
+                      onGoogleSignIn: _handleGoogleSignIn,
+                      isSigningIn: state is AuthLoading,
+                    );
                   },
                 ),
               ),
@@ -872,6 +858,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
           ],
         ),
       ),
+        ), // Close PopScope
     );
   }
 
@@ -881,14 +868,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission required'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-          ),
-        );
+        ToastUtils.showError(context, 'Microphone permission required');
       }
       return;
     }
@@ -930,14 +910,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       );
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Speech recognition not available'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-          ),
-        );
+        ToastUtils.showError(context, 'Speech recognition not available');
       }
     }
   }
@@ -978,14 +951,13 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     final isAuthenticated = await _backendApi.isAuthenticated();
     if (!isAuthenticated) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please sign in to chat with Krishna'),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-          ),
-        );
+        // Dismiss keyboard before showing login modal
+        FocusScope.of(context).unfocus();
+        _textFocusNode.unfocus();
+        SystemChannels.textInput.invokeMethod('TextInput.hide');
+        
+        // Show info and login modal
+        ToastUtils.showInfo(context, 'Please sign in to chat with Krishna');
         _toggleLoginModal();
       }
       return;

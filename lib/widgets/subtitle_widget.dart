@@ -28,6 +28,13 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   double _currentTime = 0.0;
   late AnimationController _textFadeController;
   late Animation<double> _textFadeAnimation;
+  
+  // Timing offset to sync subtitles with audio (positive = show later text earlier)
+  // If subtitles lag behind audio, increase this to make them look ahead in timeline
+  static const double _timingOffsetSeconds = 1.2; // Look ahead by 1200ms in the timeline
+  
+  // Debug counter for logging
+  int _logCounter = 0;
 
   @override
   void initState() {
@@ -81,21 +88,21 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
       return;
     }
 
-    // Minimal delay for Unity audio start (it plays immediately after END signal)
-    print('⏰ Subtitle timer starting with minimal delay at ${DateTime.now()}');
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (!mounted || !widget.isPlaying) return;
-      
-      // Start subtitle timer
-      _playbackStartTime = DateTime.now();
-      _currentTime = 0.0;
-      print('▶️ Subtitles active at ${DateTime.now()}');
+    // Start subtitle timer immediately (no delay needed - we have timing offset)
+    print('⏰ Subtitle timer starting with +${_timingOffsetSeconds * 1000}ms look-ahead at ${DateTime.now()}');
+    
+    if (!mounted || !widget.isPlaying) return;
+    
+    // Start subtitle timer
+    _playbackStartTime = DateTime.now();
+    _currentTime = 0.0;
+    _logCounter = 0; // Reset debug counter
+    print('▶️ Subtitles active (+${_timingOffsetSeconds * 1000}ms timeline look-ahead applied)');
 
-      // Update text at 60 FPS (similar to requestAnimationFrame)
-      _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-        if (!mounted) return;
-        _updateText();
-      });
+    // Update text at 60 FPS (similar to requestAnimationFrame)
+    _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted) return;
+      _updateText();
     });
   }
 
@@ -104,8 +111,15 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
       return;
     }
 
-    // Calculate current playback time
-    _currentTime = DateTime.now().difference(_playbackStartTime!).inMilliseconds / 1000.0;
+    // Calculate current playback time with timing offset
+    // Positive offset makes subtitles look ahead in the timeline
+    final rawTime = DateTime.now().difference(_playbackStartTime!).inMilliseconds / 1000.0;
+    _currentTime = rawTime + _timingOffsetSeconds;
+    
+    // Debug: Log timing info every 500ms
+    if ((_logCounter++ % 30) == 0) {  // Every 30 frames (~500ms at 60fps)
+      print('🕐 Subtitle timing: raw=${rawTime.toStringAsFixed(3)}s, lookingAt=${_currentTime.toStringAsFixed(3)}s, offset=+${_timingOffsetSeconds}s');
+    }
 
     final alignment = widget.alignment!;
     String currentSentence = '';

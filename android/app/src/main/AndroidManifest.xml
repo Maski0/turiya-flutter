@@ -32,12 +32,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             <!-- Deep link for Supabase OAuth callback (custom scheme) -->
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="com.turiya.now"
+                    android:scheme="turiya"
                     android:host="login-callback" />
             </intent-filter>
         </activity>

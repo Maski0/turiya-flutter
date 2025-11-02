@@ -4,7 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 class BackendApiService {
-  static String get baseUrl => dotenv.env['BACKEND_URL'] ?? 'http://10.0.2.2:8080';
+  static String get baseUrl => dotenv.env['BACKEND_URL']!;
   final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
   
   /// Get current Supabase access token (JWT)
