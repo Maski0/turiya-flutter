@@ -5,6 +5,11 @@ echo "  Turiya Flutter - Emulator Setup"
 echo "=========================================="
 echo ""
 
+# Set Android SDK paths
+export ANDROID_HOME="/d/android"
+export ANDROID_SDK_ROOT="/d/android"
+export PATH="$PATH:/d/android/emulator:/d/android/platform-tools"
+
 # Find emulator
 AVD_NAME=$(emulator -list-avds 2>&1 | grep Pixel | head -n 1)
 
@@ -12,6 +17,8 @@ if [ -z "$AVD_NAME" ]; then
     echo "❌ Error: No Pixel emulator found"
     echo ""
     echo "Please create an emulator in Android Studio first."
+    echo ""
+    echo "💡 For physical device: Use ./connect_wifi_adb.sh instead"
     exit 1
 fi
 
@@ -97,10 +104,12 @@ echo "=========================================="
 echo "  ✅ Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Backend URL: http://10.0.2.2:8080"
+echo "Backend URL: http://localhost:8080"
 echo ""
 echo "To run the app:"
 echo "  flutter run"
 echo ""
 echo "Make sure your backend is running on localhost:8080"
+echo ""
+echo "💡 For physical device: Use ./connect_wifi_adb.sh instead"
 echo ""

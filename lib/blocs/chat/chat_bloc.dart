@@ -119,19 +119,39 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
         emit((state as ChatLoaded).copyWith(
           followUpQuestions: followUps,
           isGenerating: false,
+          pendingMessage: null, // Clear pending message on successful send
         ));
       }
     } catch (e) {
+      print('❌ Error sending message: $e');
+      
+      // Remove the optimistically added user message
+      currentMessages.removeLast();
+      
+      // Get current follow-ups before updating cache
+      final currentFollowUps = state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : <String>[];
+      
+      // Update cache to reflect removal
+      if (currentThreadId != null) {
+        await _cacheService.cacheMessages(
+          currentMessages, 
+          currentThreadId,
+          followUpQuestions: currentFollowUps,
+        );
+      }
+      
+      // Show error toast
       emit(ChatError(e.toString().replaceAll('Exception: ', '')));
       
-      // Restore previous state after error (keep follow-ups cleared)
+      // Restore to ChatLoaded state with pending message after showing error
       await Future.delayed(const Duration(seconds: 2));
-      if (state is ChatLoaded) {
-        emit((state as ChatLoaded).copyWith(
-          isGenerating: false,
-          followUpQuestions: [], // Keep follow-ups cleared after error
-        ));
-      }
+      emit(ChatLoaded(
+        messages: currentMessages,
+        threadId: currentThreadId,
+        followUpQuestions: currentFollowUps,
+        isGenerating: false, // Make sure loading is stopped
+        pendingMessage: event.message, // Restore message in input field
+      ));
     }
   }
 

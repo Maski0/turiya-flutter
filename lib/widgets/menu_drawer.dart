@@ -7,7 +7,7 @@ import '../blocs/memory/memory_bloc.dart';
 import '../utils/toast_utils.dart';
 import 'memory_screen.dart';
 
-class MenuDrawer extends StatelessWidget {
+class MenuDrawer extends StatefulWidget {
   final VoidCallback onClose;
 
   const MenuDrawer({
@@ -16,13 +16,19 @@ class MenuDrawer extends StatelessWidget {
   });
 
   @override
+  State<MenuDrawer> createState() => _MenuDrawerState();
+}
+
+class _MenuDrawerState extends State<MenuDrawer> {
+
+  @override
   Widget build(BuildContext context) {
     final menuOptions = [
       _MenuOption(
         icon: Icons.auto_awesome,
         title: 'My Memories',
         onTap: () {
-          onClose();
+          widget.onClose();
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -39,6 +45,7 @@ class MenuDrawer extends StatelessWidget {
         icon: Icons.settings,
         title: 'Settings',
         onTap: () {
+          widget.onClose();
           ToastUtils.showInfo(context, 'Settings coming soon');
         },
       ),
@@ -46,6 +53,7 @@ class MenuDrawer extends StatelessWidget {
         icon: Icons.help_outline,
         title: 'Help & Support',
         onTap: () {
+          widget.onClose();
           ToastUtils.showInfo(context, 'Help & Support coming soon');
         },
       ),
@@ -55,7 +63,7 @@ class MenuDrawer extends StatelessWidget {
         textColor: Colors.redAccent,
         onTap: () {
           context.read<AuthBloc>().add(const AuthSignOutRequested());
-          onClose();
+          widget.onClose();
         },
       ),
     ];
@@ -210,7 +218,7 @@ class MenuDrawer extends StatelessWidget {
                                   children: [
                                     Icon(
                                       option.icon,
-                                      color: option.textColor ?? Colors.white.withOpacity(0.9),
+                                      color: option.iconColor ?? option.textColor ?? Colors.white.withOpacity(0.9),
                                       size: 24,
                                     ),
                                     const SizedBox(width: 16),
@@ -257,7 +265,7 @@ class MenuDrawer extends StatelessWidget {
               right: 0,
               child: Center(
                 child: GestureDetector(
-                  onTap: onClose,
+                  onTap: widget.onClose,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
@@ -308,12 +316,14 @@ class _MenuOption {
   final String title;
   final VoidCallback onTap;
   final Color? textColor;
+  final Color? iconColor;
 
   _MenuOption({
     required this.icon,
     required this.title,
     required this.onTap,
     this.textColor,
+    this.iconColor,
   });
 }
 

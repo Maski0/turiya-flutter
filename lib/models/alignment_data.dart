@@ -88,12 +88,14 @@ class ConsolidatedAlignment {
   final List<double> characterStartTimesSeconds;
   final List<double> characterEndTimesSeconds;
   double timeOffset;
+  double actualAudioDurationSeconds;
 
   ConsolidatedAlignment({
     List<String>? characters,
     List<double>? characterStartTimesSeconds,
     List<double>? characterEndTimesSeconds,
     this.timeOffset = 0.0,
+    this.actualAudioDurationSeconds = 0.0,
   })  : characters = characters ?? [],
         characterStartTimesSeconds = characterStartTimesSeconds ?? [],
         characterEndTimesSeconds = characterEndTimesSeconds ?? [];

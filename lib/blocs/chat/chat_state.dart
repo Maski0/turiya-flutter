@@ -30,28 +30,32 @@ class ChatLoaded extends ChatState {
   final String? threadId;
   final List<String> followUpQuestions;
   final bool isGenerating;
+  final String? pendingMessage;
 
   const ChatLoaded({
     required this.messages,
     this.threadId,
     this.followUpQuestions = const [],
     this.isGenerating = false,
+    this.pendingMessage,
   });
 
   @override
-  List<Object?> get props => [messages, threadId, followUpQuestions, isGenerating];
+  List<Object?> get props => [messages, threadId, followUpQuestions, isGenerating, pendingMessage];
 
   ChatLoaded copyWith({
     List<ChatMessage>? messages,
     String? threadId,
     List<String>? followUpQuestions,
     bool? isGenerating,
+    String? pendingMessage,
   }) {
     return ChatLoaded(
       messages: messages ?? this.messages,
       threadId: threadId ?? this.threadId,
       followUpQuestions: followUpQuestions ?? this.followUpQuestions,
       isGenerating: isGenerating ?? this.isGenerating,
+      pendingMessage: pendingMessage,
     );
   }
 }

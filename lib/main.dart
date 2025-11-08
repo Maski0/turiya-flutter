@@ -21,6 +21,9 @@ import 'widgets/chat_sidebar.dart';
 import 'widgets/menu_drawer.dart';
 import 'widgets/subtitle_widget.dart';
 import 'widgets/profile_avatar_widget.dart';
+import 'widgets/recording_indicator.dart';
+import 'widgets/recording_preview_overlay.dart';
+import 'services/screen_recording_service.dart';
 import 'blocs/auth/auth_bloc_export.dart';
 import 'blocs/chat/chat_bloc_export.dart';
 import 'blocs/credits/credits_bloc.dart';
@@ -103,7 +106,13 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   bool _showChip = false; // Hidden by default, shows when chat opens
   bool _isInInitialGracePeriod = false; // First 3s after opening chat
   bool _isRecording = false;
+  bool _isScreenRecording = false; // For screen recording feature
   Timer? _chipAutoHideTimer; // Timer for auto-hiding the chip
+  Timer? _recordingAutoStopTimer; // Timer for auto-stopping recording
+  DateTime? _recordingStartTime; // When recording started
+  OverlayEntry? _recordingIndicatorOverlay;
+  final _screenRecordingService = ScreenRecordingService();
+  static const int _maxRecordingDurationMinutes = 5; // Max 5 minutes
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   String? _threadId; // Conversation thread ID
@@ -338,7 +347,25 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 _threadId = state.threadId;
               }
               
-              // Don't reset generating flag here - keep it until audio finishes
+              // Restore input field if there's a pending message (after error)
+              if (state.pendingMessage != null && state.pendingMessage!.isNotEmpty) {
+                _textController.text = state.pendingMessage!;
+                print('📝 Restored failed message to input field: ${state.pendingMessage}');
+              }
+              
+              // Sync generating state from bloc (important after errors)
+              // Only update if bloc says not generating and we're not playing audio
+              if (!state.isGenerating && !_isAudioPlaying) {
+                if (mounted && (_isGenerating || _showUserMessageBubble)) {
+                  setState(() {
+                    _isGenerating = false;
+                    _showUserMessageBubble = false; // Hide user message bubble on error recovery
+                  });
+                  print('✅ Synced state from ChatLoaded: _isGenerating=false, _showUserMessageBubble=false');
+                }
+              }
+              
+              // Don't reset generating flag during audio playback
               // (It will be reset after audio playback completes)
               
               // Find any unplayed AI messages and play them
@@ -362,19 +389,24 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     print('📝 Text for TTS: "${message.content}"');
                     print('📝 Text length: ${message.content.length} chars');
                     
-                    // Clear previous alignment (but don't set isAudioPlaying yet to avoid blink)
+                    // Clear previous alignment and start audio playback immediately
+                    // Keep _isGenerating = true to show "Narrating..." state
                     if (mounted) {
                       setState(() {
                         _currentAlignment = null;
-                        _isAudioPlaying = false;
+                        _isAudioPlaying = true; // Start showing subtitles immediately
+                        // _isGenerating stays true - will show "Narrating..." in status widget
+                        _showFollowUps = false; // Hide follow-ups when audio starts
                       });
+                      print('🔊 Set _isAudioPlaying = true BEFORE streamToUnity at ${DateTime.now()}');
+                      print('🎵 Keeping _isGenerating = true (will show Narrating...)');
                     }
                     
                     // Content is already parsed in ChatMessage.fromJson, use directly
-                    await _audioStreamer.streamToUnity(
+                    final consolidatedAlignment = await _audioStreamer.streamToUnity(
                       message.content,
                       onAlignmentUpdate: (alignment) {
-                        // Update alignment data as chunks arrive (but don't start audio playback yet)
+                        // Update alignment data as chunks arrive - subtitles will update in real-time
                         if (mounted) {
                           setState(() {
                             _currentAlignment = alignment;
@@ -383,30 +415,16 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       },
                     );
                     print('✅ Audio sent to Unity with ${_currentAlignment?.characters.length ?? 0} characters');
-                    print('🎵 All audio chunks sent - Unity should be playing NOW');
+                    print('🎵 All audio chunks sent - Unity is playing with synced subtitles');
                     
-                    // NOW start audio playback - Unity has received all chunks and END signal
-                    if (mounted) {
-                      setState(() {
-                        _isAudioPlaying = true;
-                        _isGenerating = false; // Stop showing "Pondering...", now showing "Narrating..."
-                        _showFollowUps = false; // Hide follow-ups when audio starts
-                      });
-                      print('🔊 Set _isAudioPlaying = true at ${DateTime.now()}');
-                      print('✅ Set _isGenerating = false (audio started)');
-                    }
+                    // Use actual audio duration from PCM bytes (includes all audio, even without alignment)
+                    double audioDuration = consolidatedAlignment.actualAudioDurationSeconds;
+                    // Add a small buffer (0.5s) to ensure audio finishes
+                    audioDuration += 0.5;
+                    print('📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
                     
-                    // Calculate actual audio duration from alignment data
-                    double audioDuration = 3.0; // Default fallback
-                    if (_currentAlignment != null && 
-                        _currentAlignment!.characterEndTimesSeconds.isNotEmpty) {
-                      // Get the end time of the last character
-                      audioDuration = _currentAlignment!.characterEndTimesSeconds.last;
-                      // Add a small buffer (0.5s) to ensure audio finishes
-                      audioDuration += 0.5;
-                      print('📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
-                    } else {
-                      print('⚠️ No alignment data, using default ${audioDuration}s duration');
+                    if (_currentAlignment == null || _currentAlignment!.characterEndTimesSeconds.isEmpty) {
+                      print('⚠️ No alignment data, but audio duration is ${audioDuration}s from PCM bytes');
                     }
                     
                     // Mark message as played
@@ -432,6 +450,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                         });
                         print('🔇 Subtitles hidden after ${audioDuration.toStringAsFixed(2)}s');
                         print('✅ Reset _isGenerating = false (audio finished)');
+                        
+                        sendToUnity("Flutter", "OnAudioChunk", "END");
+                        print('🏁 END signal sent to Unity (audio playback complete)');
                         
                         // Fade out user message bubble
                         if (_showUserMessageBubble) {
@@ -463,6 +484,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     // Clear the currently playing message ID on error
                     _currentlyPlayingMessageId = null;
                     
+                    // Send END signal to Unity to clean up state
+                    sendToUnity("Flutter", "OnAudioChunk", "END");
+                    print('🏁 END signal sent to Unity (error cleanup)');
+                    
                     // Hide subtitles immediately on error
                     if (mounted) {
                       setState(() {
@@ -491,11 +516,20 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 }
               }
             } else if (state is ChatError) {
+              // Send END signal to Unity to clean up state
+              sendToUnity("Flutter", "OnAudioChunk", "END");
+              print('🏁 END signal sent to Unity (ChatError cleanup)');
+              
               // Handle error and reset generating flag
-              if (_isGenerating) {
-                _isGenerating = false;
-                ToastUtils.showError(context, state.message);
+              if (mounted) {
+                setState(() {
+                  _isGenerating = false;
+                  _isAudioPlaying = false;
+                  _showUserMessageBubble = false;
+                });
               }
+              ToastUtils.showError(context, state.message);
+              print('❌ Error state received, reset _isGenerating = false');
             }
           },
         ),
@@ -542,6 +576,38 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               child: EmbedUnity(),
             ),
             
+            // User message - shows at top right after sending
+            if (_showUserMessageBubble && _lastUserMessage != null)
+              Positioned(
+                top: 100,
+                right: 20,
+                left: 20,
+                child: AnimatedOpacity(
+                  opacity: _showUserMessageBubble ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Text(
+                      _lastUserMessage!,
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 16,
+                        height: 1.5,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            
+            // Real-time subtitles - shows during audio playback
+            if (_isAudioPlaying && _currentAlignment != null)
+              SubtitleWidget(
+                alignment: _currentAlignment,
+                isPlaying: _isAudioPlaying,
+              ),
+            
             // Top bar with menu and login
             Positioned(
               top: 0,
@@ -550,9 +616,11 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               child: SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
                       // Menu button (opens chat) - only when authenticated
                       BlocBuilder<AuthBloc, AuthState>(
                         builder: (context, state) {
@@ -654,6 +722,67 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       ),
                     ],
                   ),
+                  // Recording button - appears below profile avatar when authenticated
+                  BlocBuilder<AuthBloc, AuthState>(
+                    builder: (context, state) {
+                      if (state is AuthAuthenticated) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              GestureDetector(
+                                onTap: _toggleScreenRecording,
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: _isScreenRecording
+                                          ? [
+                                              Colors.red.withOpacity(0.8),
+                                              Colors.red.withOpacity(0.6),
+                                            ]
+                                          : [
+                                              Colors.white.withOpacity(0.2),
+                                              Colors.white.withOpacity(0.1),
+                                            ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _isScreenRecording
+                                          ? Colors.red.withOpacity(0.8)
+                                          : Colors.white.withOpacity(0.3),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _isScreenRecording
+                                            ? Colors.red.withOpacity(0.3)
+                                            : Colors.black.withOpacity(0.2),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      _isScreenRecording ? Icons.stop_circle : Icons.fiber_manual_record,
+                                      color: _isScreenRecording ? Colors.white : Colors.red,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
                 ),
               ),
             ),
@@ -823,38 +952,6 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                   },
                 ),
               ),
-            
-            // User message - shows at top right after sending
-            if (_showUserMessageBubble && _lastUserMessage != null)
-              Positioned(
-                top: 100,
-                right: 20,
-                left: 20,
-                child: AnimatedOpacity(
-                  opacity: _showUserMessageBubble ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 20),
-                    child: Text(
-                      _lastUserMessage!,
-                      textAlign: TextAlign.left,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 16,
-                        height: 1.5,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            
-            // Real-time subtitles - shows during audio playback
-            if (_isAudioPlaying && _currentAlignment != null)
-              SubtitleWidget(
-                alignment: _currentAlignment,
-                isPlaying: _isAudioPlaying,
-              ),
           ],
         ),
       ),
@@ -982,13 +1079,210 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     ));
   }
 
+  void _showRecordingIndicator() {
+    _recordingIndicatorOverlay = OverlayEntry(
+      builder: (context) => RecordingIndicator(
+        startTime: _recordingStartTime ?? DateTime.now(),
+        maxDurationSeconds: _maxRecordingDurationMinutes * 60,
+      ),
+    );
+    Overlay.of(context).insert(_recordingIndicatorOverlay!);
+  }
+
+  void _removeRecordingIndicator() {
+    _recordingIndicatorOverlay?.remove();
+    _recordingIndicatorOverlay = null;
+  }
+
+  Future<void> _toggleScreenRecording() async {
+    if (_isScreenRecording) {
+      // Stop recording
+      String? path = await _screenRecordingService.stopRecording();
+      
+      // Cancel auto-stop timer
+      _recordingAutoStopTimer?.cancel();
+      _recordingAutoStopTimer = null;
+      
+      setState(() {
+        _isScreenRecording = false;
+        _recordingStartTime = null;
+      });
+      
+      _removeRecordingIndicator();
+
+      if (path != null && mounted) {
+        // Show preview overlay
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted) {
+          RecordingPreviewOverlay.show(context, path);
+        }
+      } else {
+        if (mounted) {
+          ToastUtils.showError(context, 'Failed to save recording');
+        }
+      }
+    } else {
+      // Start recording - show permission info dialog first
+      bool? shouldProceed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withOpacity(0.15),
+                    Colors.white.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.2),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.screen_share,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Screen Recording Permission',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Android will ask for screen recording permission.\n\nPlease tap "Start now" to begin recording.',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      // If user cancelled, don't proceed
+      if (shouldProceed != true || !mounted) {
+        return;
+      }
+
+      // Start recording
+      bool started = await _screenRecordingService.startRecording();
+      
+      if (started) {
+        setState(() {
+          _isScreenRecording = true;
+          _recordingStartTime = DateTime.now();
+        });
+        
+        // Start auto-stop timer (max recording duration)
+        _recordingAutoStopTimer = Timer(
+          Duration(minutes: _maxRecordingDurationMinutes),
+          () async {
+            if (_isScreenRecording && mounted) {
+              debugPrint('⏱️ Auto-stopping recording after $_maxRecordingDurationMinutes minutes');
+              await _toggleScreenRecording();
+              if (mounted) {
+                ToastUtils.showInfo(
+                  context,
+                  'Recording stopped (max duration reached)',
+                );
+              }
+            }
+          },
+        );
+        
+        // Show recording indicator
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (mounted) {
+          _showRecordingIndicator();
+          ToastUtils.showSuccess(context, 'Screen recording started');
+        }
+      } else {
+        if (mounted) {
+          ToastUtils.showError(
+            context,
+            'Failed to start recording. Please check permissions.',
+          );
+        }
+      }
+    }
+  }
+
   @override
   void dispose() {
     _textController.dispose();
     _textFocusNode.dispose();
     _scrollController.dispose();
     _animationController.dispose();
-    _chipAutoHideTimer?.cancel(); // Cancel timer on dispose
+    _chipAutoHideTimer?.cancel();
+    _recordingAutoStopTimer?.cancel(); // Cancel recording auto-stop timer
+    _removeRecordingIndicator();
     super.dispose();
   }
 }

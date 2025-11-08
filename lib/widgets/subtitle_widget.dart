@@ -29,9 +29,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   late AnimationController _textFadeController;
   late Animation<double> _textFadeAnimation;
   
-  // Timing offset to sync subtitles with audio (positive = show later text earlier)
-  // If subtitles lag behind audio, increase this to make them look ahead in timeline
-  static const double _timingOffsetSeconds = 1.2; // Look ahead by 1200ms in the timeline
+  static const double _timingOffsetSeconds = -0.3;
   
   // Debug counter for logging
   int _logCounter = 0;
@@ -69,11 +67,21 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   void didUpdateWidget(SubtitleWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Reset playback if alignment changes or playing state changes
-    if (widget.alignment != oldWidget.alignment ||
-        widget.isPlaying != oldWidget.isPlaying) {
+    // Only restart playback when:
+    // 1. Playing state changes (start/stop)
+    // 2. Alignment goes from null to not-null (new message starts)
+    // 3. Alignment character count DECREASES (means it's a new message, not cumulative update)
+    final bool playingStateChanged = widget.isPlaying != oldWidget.isPlaying;
+    final bool newMessageStarted = oldWidget.alignment == null && widget.alignment != null;
+    final bool newMessage = oldWidget.alignment != null && 
+                           widget.alignment != null && 
+                           widget.alignment!.characters.length < oldWidget.alignment!.characters.length;
+    
+    if (playingStateChanged || newMessageStarted || newMessage) {
       _startPlayback();
     }
+    // Otherwise, alignment is just being updated with more data (cumulative batches)
+    // Don't restart the timer - let it continue from where it was
   }
 
   void _startPlayback() {
@@ -88,8 +96,10 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
       return;
     }
 
-    // Start subtitle timer immediately (no delay needed - we have timing offset)
-    print('⏰ Subtitle timer starting with +${_timingOffsetSeconds * 1000}ms look-ahead at ${DateTime.now()}');
+    // Start subtitle timer immediately (offset applied in _updateText to sync with Unity buffering)
+    final offsetMs = _timingOffsetSeconds * 1000;
+    final offsetStr = offsetMs >= 0 ? '+${offsetMs.toStringAsFixed(0)}' : '${offsetMs.toStringAsFixed(0)}';
+    print('⏰ Subtitle timer starting with ${offsetStr}ms offset at ${DateTime.now()}');
     
     if (!mounted || !widget.isPlaying) return;
     
@@ -97,7 +107,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     _playbackStartTime = DateTime.now();
     _currentTime = 0.0;
     _logCounter = 0; // Reset debug counter
-    print('▶️ Subtitles active (+${_timingOffsetSeconds * 1000}ms timeline look-ahead applied)');
+    print('▶️ Subtitles active (${offsetStr}ms offset applied)');
 
     // Update text at 60 FPS (similar to requestAnimationFrame)
     _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
@@ -118,7 +128,8 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     
     // Debug: Log timing info every 500ms
     if ((_logCounter++ % 30) == 0) {  // Every 30 frames (~500ms at 60fps)
-      print('🕐 Subtitle timing: raw=${rawTime.toStringAsFixed(3)}s, lookingAt=${_currentTime.toStringAsFixed(3)}s, offset=+${_timingOffsetSeconds}s');
+      final offsetStr = _timingOffsetSeconds >= 0 ? '+${_timingOffsetSeconds}' : '${_timingOffsetSeconds}';
+      print('🕐 Subtitle timing: raw=${rawTime.toStringAsFixed(3)}s, lookingAt=${_currentTime.toStringAsFixed(3)}s, offset=${offsetStr}s');
     }
 
     final alignment = widget.alignment!;

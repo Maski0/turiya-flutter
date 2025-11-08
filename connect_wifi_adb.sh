@@ -142,6 +142,19 @@ setup_wireless() {
             
             # Save IP for later
             echo "$device_ip" > /tmp/adb_wifi_ip
+            
+            # Set up port forwarding for backend
+            echo ""
+            print_info "Setting up port forwarding (backend @ localhost:8080)..."
+            sleep 1
+            adb -s "$device_ip:5555" reverse tcp:8080 tcp:8080 > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                print_success "Port forwarding active"
+                print_info "Your device can now reach backend at localhost:8080"
+            else
+                print_warning "Port forwarding failed"
+                print_info "Run manually: adb reverse tcp:8080 tcp:8080"
+            fi
         else
             print_error "Connection failed!"
             print_info "Make sure your device and computer are on the same WiFi network"
