@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
@@ -112,6 +113,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   DateTime? _recordingStartTime; // When recording started
   OverlayEntry? _recordingIndicatorOverlay;
   final _screenRecordingService = ScreenRecordingService();
+  final _repaintBoundaryKey = GlobalKey();
   static const int _maxRecordingDurationMinutes = 5; // Max 5 minutes
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -141,6 +143,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     
     // Initialize speech to text
     _speechToText = stt.SpeechToText();
+    
+    // Initialize screen recording service
+    _screenRecordingService.setRepaintBoundaryKey(_repaintBoundaryKey);
     
     // Initialize animation controller for smooth transitions
     _animationController = AnimationController(
@@ -280,6 +285,178 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   Future<void> _handleGoogleSignIn() async {
     // Trigger sign-in via BLoC
     context.read<AuthBloc>().add(const AuthGoogleSignInRequested());
+  }
+
+  Future<void> _showExitConfirmationDialog() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return GestureDetector(
+          onTap: () => Navigator.of(dialogContext).pop(false),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              color: Colors.black.withOpacity(0.1),
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {}, // Prevent closing when tapping the modal content
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 40,
+                            spreadRadius: 0,
+                            offset: const Offset(0, 20),
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 20,
+                            spreadRadius: 0,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.18),
+                                  width: 0.5,
+                                ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.white.withOpacity(0.15),
+                                    Colors.white.withOpacity(0.08),
+                                  ],
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Icon
+                                  Icon(
+                                    Icons.logout,
+                                    color: Colors.white.withOpacity(0.9),
+                                    size: 48,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  // Title
+                                  const Text(
+                                    'Exit App?',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Message
+                                  Text(
+                                    'Are you sure you want to leave?',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 16,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 28),
+                                  // Buttons
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.of(dialogContext).pop(false),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: Colors.white.withOpacity(0.3),
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                            child: const Text(
+                                              'Cancel',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.of(dialogContext).pop(true),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.withOpacity(0.85),
+                                              borderRadius: BorderRadius.circular(14),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.red.withOpacity(0.3),
+                                                  blurRadius: 12,
+                                                  spreadRadius: 0,
+                                                  offset: const Offset(0, 4),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Text(
+                                              'Exit',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    // If user confirmed exit, close the app
+    if (shouldExit == true) {
+      SystemNavigator.pop();
+    }
   }
 
   @override
@@ -536,77 +713,105 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       ],
       child: PopScope(
         canPop: false,
-        onPopInvokedWithResult: (bool didPop, dynamic result) {
+        onPopInvokedWithResult: (bool didPop, dynamic result) async {
           if (didPop) return;
           
           final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
           final hasFocus = _textFocusNode.hasFocus;
-          print('🔙 Back pressed: keyboard=$keyboardHeight, hasFocus=$hasFocus, modal=$_showLoginModal, sidebar=$_showChatSidebar');
           
-          // Check if keyboard is open (either by height or focus)
-          if (keyboardHeight > 0 || hasFocus) {
-            // Keyboard is open or text field has focus, dismiss it forcefully
-            print('⌨️ Dismissing keyboard...');
+          // Priority 1: Close keyboard if actually visible
+          if (keyboardHeight > 0) {
             FocusScope.of(context).unfocus();
             _textFocusNode.unfocus();
-            // Force hide keyboard using platform channel
-            SystemChannels.textInput.invokeMethod('TextInput.hide');
-          } else if (_showLoginModal) {
-            // Close login modal if open
+            await SystemChannels.textInput.invokeMethod('TextInput.hide');
+            return;
+          }
+          
+          // Also unfocus if field has focus but keyboard is already hidden
+          if (hasFocus) {
+            FocusScope.of(context).unfocus();
+            _textFocusNode.unfocus();
+            // Don't return - continue to next action
+          }
+          
+          // Priority 2: Close login modal if open
+          if (_showLoginModal) {
             _toggleLoginModal();
-          } else if (_showChatSidebar) {
-            // Close chat sidebar if open
+            return;
+          }
+          
+          // Priority 3: Close chat sidebar if open
+          if (_showChatSidebar) {
             setState(() {
               _showChatSidebar = false;
             });
-          } else {
-            // Nothing to close, allow back to exit app
-            // Show confirmation dialog or exit
-            // For now, do nothing (stay in app)
-            print('🏠 No action - staying in app');
+            return;
           }
+          
+          // Priority 4: Show exit confirmation dialog
+          _showExitConfirmationDialog();
         },
         child: Scaffold(
           backgroundColor: Colors.black,
           resizeToAvoidBottomInset: false,
-        body: Stack(
+        body: GestureDetector(
+          onTap: () {
+            // Dismiss keyboard on tap outside (works for iOS and Android)
+            if (_textFocusNode.hasFocus) {
+              FocusScope.of(context).unfocus();
+              _textFocusNode.unfocus();
+              SystemChannels.textInput.invokeMethod('TextInput.hide');
+            }
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Stack(
           children: [
-            // Unity avatar - full screen background
-            const Positioned.fill(
-              child: EmbedUnity(),
-            ),
-            
-            // User message - shows at top right after sending
-            if (_showUserMessageBubble && _lastUserMessage != null)
-              Positioned(
-                top: 100,
-                right: 20,
-                left: 20,
-                child: AnimatedOpacity(
-                  opacity: _showUserMessageBubble ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 20),
-                    child: Text(
-                      _lastUserMessage!,
-                      textAlign: TextAlign.left,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 16,
-                        height: 1.5,
-                        fontWeight: FontWeight.w400,
-                      ),
+            // RepaintBoundary for widget recording
+            Positioned.fill(
+              child: RepaintBoundary(
+                key: _repaintBoundaryKey,
+                child: Stack(
+                  children: [
+                    // Unity avatar - full screen background
+                    const Positioned.fill(
+                      child: EmbedUnity(),
                     ),
-                  ),
+                    
+                    // User message - shows at top right after sending
+                    if (_showUserMessageBubble && _lastUserMessage != null)
+                      Positioned(
+                        top: 100,
+                        right: 20,
+                        left: 20,
+                        child: AnimatedOpacity(
+                          opacity: _showUserMessageBubble ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 20, right: 80),
+                            child: Text(
+                              _lastUserMessage!,
+                              textAlign: TextAlign.left,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 16,
+                                height: 1.5,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    
+                    // Real-time subtitles - shows during audio playback
+                    if (_isAudioPlaying && _currentAlignment != null)
+                      SubtitleWidget(
+                        alignment: _currentAlignment,
+                        isPlaying: _isAudioPlaying,
+                      ),
+                  ],
                 ),
               ),
-            
-            // Real-time subtitles - shows during audio playback
-            if (_isAudioPlaying && _currentAlignment != null)
-              SubtitleWidget(
-                alignment: _currentAlignment,
-                isPlaying: _isAudioPlaying,
-              ),
+            ),
             
             // Top bar with menu and login
             Positioned(
@@ -621,10 +826,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                      // Menu button (opens chat) - only when authenticated
+                      // Menu button (opens chat) - only when authenticated and not recording
                       BlocBuilder<AuthBloc, AuthState>(
                         builder: (context, state) {
-                          if (state is AuthAuthenticated) {
+                          if (state is AuthAuthenticated && !_isScreenRecording) {
                             return GestureDetector(
                               onTap: () {
                                 // Toggle chat sidebar
@@ -686,10 +891,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                           return const SizedBox.shrink();
                         },
                       ),
-                      // Right side - Profile or Login
+                      // Right side - Profile or Login (hide during recording)
                       BlocBuilder<AuthBloc, AuthState>(
                         builder: (context, state) {
-                          if (state is AuthAuthenticated) {
+                          if (state is AuthAuthenticated && !_isScreenRecording) {
                             return ProfileAvatarWidget(
                               onTap: () {
                                 setState(() {
@@ -698,6 +903,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                 _animationController.forward();
                               },
                             );
+                          }
+                          if (_isScreenRecording) {
+                            return const SizedBox.shrink();
                           }
                           return GlassButton(
                             onTap: _toggleLoginModal,
@@ -723,9 +931,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     ],
                   ),
                   // Recording button - appears below profile avatar when authenticated
+                  // Hidden when recording is active (tap the "Recording" indicator to stop)
                   BlocBuilder<AuthBloc, AuthState>(
                     builder: (context, state) {
-                      if (state is AuthAuthenticated) {
+                      if (state is AuthAuthenticated && !_isScreenRecording) {
                         return Padding(
                           padding: const EdgeInsets.only(top: 12),
                           child: Row(
@@ -738,28 +947,19 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                   height: 44,
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
-                                      colors: _isScreenRecording
-                                          ? [
-                                              Colors.red.withOpacity(0.8),
-                                              Colors.red.withOpacity(0.6),
-                                            ]
-                                          : [
-                                              Colors.white.withOpacity(0.2),
-                                              Colors.white.withOpacity(0.1),
-                                            ],
+                                      colors: [
+                                        Colors.white.withOpacity(0.2),
+                                        Colors.white.withOpacity(0.1),
+                                      ],
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: _isScreenRecording
-                                          ? Colors.red.withOpacity(0.8)
-                                          : Colors.white.withOpacity(0.3),
+                                      color: Colors.white.withOpacity(0.3),
                                       width: 1.5,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: _isScreenRecording
-                                            ? Colors.red.withOpacity(0.3)
-                                            : Colors.black.withOpacity(0.2),
+                                        color: Colors.black.withOpacity(0.2),
                                         blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
@@ -767,8 +967,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                   ),
                                   child: Center(
                                     child: Icon(
-                                      _isScreenRecording ? Icons.stop_circle : Icons.fiber_manual_record,
-                                      color: _isScreenRecording ? Colors.white : Colors.red,
+                                      Icons.fiber_manual_record,
+                                      color: Colors.red,
                                       size: 24,
                                     ),
                                   ),
@@ -954,6 +1154,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               ),
           ],
         ),
+        ), // Close GestureDetector
       ),
         ), // Close PopScope
     );
@@ -1084,6 +1285,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       builder: (context) => RecordingIndicator(
         startTime: _recordingStartTime ?? DateTime.now(),
         maxDurationSeconds: _maxRecordingDurationMinutes * 60,
+        onTap: () {
+          // Tapping the recording indicator stops the recording
+          _toggleScreenRecording();
+        },
       ),
     );
     Overlay.of(context).insert(_recordingIndicatorOverlay!);
@@ -1096,8 +1301,63 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
 
   Future<void> _toggleScreenRecording() async {
     if (_isScreenRecording) {
+      // Show processing dialog
+      if (!mounted) return;
+      
+      String processingMessage = 'Processing frames...';
+      
+      // Show modal dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Update dialog state when processing message changes
+              _screenRecordingService.setProcessingCallback((message) {
+                processingMessage = message;
+                setDialogState(() {});
+              });
+              
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: AlertDialog(
+                  backgroundColor: Colors.black.withOpacity(0.9),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        processingMessage,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      
       // Stop recording
       String? path = await _screenRecordingService.stopRecording();
+      
+      // Close processing dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
       
       // Cancel auto-stop timer
       _recordingAutoStopTimer?.cancel();
@@ -1122,116 +1382,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         }
       }
     } else {
-      // Start recording - show permission info dialog first
-      bool? shouldProceed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withOpacity(0.15),
-                    Colors.white.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.screen_share,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Screen Recording Permission',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Android will ask for screen recording permission.\n\nPlease tap "Start now" to begin recording.',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Continue',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-
-      // If user cancelled, don't proceed
-      if (shouldProceed != true || !mounted) {
-        return;
-      }
-
-      // Start recording
+      // Start recording with internal audio only (no microphone needed!)
+      _screenRecordingService.setAudioCaptureMode(internalOnly: true);
       bool started = await _screenRecordingService.startRecording();
       
       if (started) {
@@ -1261,7 +1413,6 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         await Future.delayed(const Duration(milliseconds: 100));
         if (mounted) {
           _showRecordingIndicator();
-          ToastUtils.showSuccess(context, 'Screen recording started');
         }
       } else {
         if (mounted) {

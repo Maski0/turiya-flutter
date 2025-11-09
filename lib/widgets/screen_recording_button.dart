@@ -43,8 +43,61 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      // Stop recording
+      // Show processing dialog
+      if (!mounted) return;
+      
+      String processingMessage = 'Processing frames...';
+      
+      // Set up callback to update dialog
+      _recordingService.setProcessingCallback((message) {
+        processingMessage = message;
+        if (mounted) {
+          setState(() {}); // Trigger rebuild to update dialog
+        }
+      });
+      
+      // Show modal dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Update dialog state when processing message changes
+              _recordingService.setProcessingCallback((message) {
+                processingMessage = message;
+                setDialogState(() {});
+              });
+              
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: AlertDialog(
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 20),
+                      Text(
+                        processingMessage,
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      
+      // Stop recording (this will take time)
       String? path = await _recordingService.stopRecording();
+      
+      // Close processing dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
       
       setState(() {
         _isRecording = false;
@@ -67,7 +120,8 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
         }
       }
     } else {
-      // Start recording
+      // Start recording with internal audio only (no microphone)
+      _recordingService.setAudioCaptureMode(internalOnly: true);
       bool started = await _recordingService.startRecording();
       
       setState(() {
@@ -75,12 +129,6 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
       });
 
       if (started) {
-        if (mounted) {
-          ToastUtils.showSuccess(
-            context,
-            'Screen recording started',
-          );
-        }
         widget.onRecordingStarted?.call();
       } else {
         if (mounted) {
@@ -155,7 +203,54 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
+      // Show processing dialog
+      if (!mounted) return;
+      
+      String processingMessage = 'Processing frames...';
+      
+      // Show modal dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Update dialog state when processing message changes
+              _recordingService.setProcessingCallback((message) {
+                processingMessage = message;
+                setDialogState(() {});
+              });
+              
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: AlertDialog(
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 20),
+                      Text(
+                        processingMessage,
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      
+      // Stop recording
       String? path = await _recordingService.stopRecording();
+      
+      // Close processing dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
       setState(() {
         _isRecording = false;
       });
@@ -171,15 +266,14 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
         }
       }
     } else {
+      // Start recording with internal audio only (no microphone)
+      _recordingService.setAudioCaptureMode(internalOnly: true);
       bool started = await _recordingService.startRecording();
       setState(() {
         _isRecording = started;
       });
 
       if (started) {
-        if (mounted) {
-          ToastUtils.showSuccess(context, 'Recording started');
-        }
         widget.onRecordingStarted?.call();
       } else {
         if (mounted) {

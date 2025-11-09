@@ -9,6 +9,7 @@
     <!-- Permissions for screen recording -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     
     <application
         android:label="flutter_embed_unity_example"
@@ -57,7 +58,7 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

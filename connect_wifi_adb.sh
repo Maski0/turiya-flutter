@@ -155,6 +155,24 @@ setup_wireless() {
                 print_warning "Port forwarding failed"
                 print_info "Run manually: adb reverse tcp:8080 tcp:8080"
             fi
+            
+            # Ask if user wants to run flutter with filtered logs
+            echo ""
+            read -p "$(echo -e ${YELLOW}📱 Do you want to run Flutter with filtered logs? \(y/n\): ${NC})" -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                print_success "Starting Flutter with filtered logs (showing only I/flutter)..."
+                echo ""
+                print_info "Press Ctrl+C to stop"
+                echo ""
+                sleep 1
+                cd "$(dirname "$0")" && flutter run 2>&1 | grep --line-buffered "I/flutter"
+            else
+                print_info "Skipping Flutter run. You can start it manually with:"
+                print_info "  cd turiya-flutter && flutter run"
+                print_info "Or with filtered logs:"
+                print_info "  cd turiya-flutter && flutter run 2>&1 | grep 'I/flutter'"
+            fi
         else
             print_error "Connection failed!"
             print_info "Make sure your device and computer are on the same WiFi network"

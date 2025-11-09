@@ -37,14 +37,11 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
   VideoPlayerController? _videoController;
   bool _isLoading = true;
   String? _error;
-  int _fileSize = 0;
-  DateTime? _fileModified;
 
   @override
   void initState() {
     super.initState();
     _initializeVideo();
-    _loadFileStats();
   }
 
   Future<void> _initializeVideo() async {
@@ -61,6 +58,13 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
       _videoController = VideoPlayerController.file(file);
       await _videoController!.initialize();
       
+      // Listen to video position changes to update progress bar
+      _videoController!.addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -74,21 +78,6 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<void> _loadFileStats() async {
-    try {
-      final file = File(widget.videoPath);
-      final stats = await file.stat();
-      if (mounted) {
-        setState(() {
-          _fileSize = stats.size;
-          _fileModified = stats.modified;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading file stats: $e');
     }
   }
 
@@ -148,11 +137,18 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
     if (confirm == true && mounted) {
       bool deleted = await ScreenRecordingService().deleteRecording(widget.videoPath);
       if (mounted) {
-        if (deleted) {
-          ToastUtils.showSuccess(context, 'Recording deleted');
-          widget.onClose();
-        } else {
-          ToastUtils.showError(context, 'Failed to delete recording');
+        // Close the dialog first to avoid Navigator conflicts
+        widget.onClose();
+        
+        // Show toast after a small delay to ensure dialog is dismissed
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        if (mounted) {
+          if (deleted) {
+            ToastUtils.showSuccess(context, 'Recording deleted');
+          } else {
+            ToastUtils.showError(context, 'Failed to delete recording');
+          }
         }
       }
     }
@@ -170,12 +166,6 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
     });
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final hours = twoDigits(duration.inHours);
@@ -190,285 +180,197 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final fileName = widget.videoPath.split('/').last;
-    final fileTime = _fileModified != null
-        ? '${_fileModified!.hour.toString().padLeft(2, '0')}:${_fileModified!.minute.toString().padLeft(2, '0')}'
-        : '--:--';
+    final screenHeight = MediaQuery.of(context).size.height;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final videoHeight = screenHeight * 0.7;
     
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-      child: Container(
-        color: Colors.black.withOpacity(0.5),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.white.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 20,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Recording Complete',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Your screen recording is ready',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Close button
-                    IconButton(
-                      onPressed: widget.onClose,
-                      icon: Icon(
-                        Icons.close,
-                        color: Colors.white.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                
-                // Video preview
-                GestureDetector(
-                  onTap: _togglePlayPause,
-                  child: Container(
-                    width: double.infinity,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: _isLoading
-                          ? Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                            )
-                          : _error != null
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.error_outline,
-                                      size: 48,
-                                      color: Colors.red.withOpacity(0.8),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _error!,
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
+    return Material(
+      type: MaterialType.transparency,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          color: Colors.black.withOpacity(0.3),
+          child: Stack(
+            children: [
+              // Main content - video with buttons
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Top spacing for close button
+                  SizedBox(height: topPadding + 60),
+                  
+                  // Video preview
+                    GestureDetector(
+                      onTap: _togglePlayPause,
+                      child: Container(
+                        width: double.infinity,
+                        height: videoHeight,
+                        color: Colors.black,
+                        child: _isLoading
+                              ? Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
                                 )
-                              : Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Video player
-                                    if (_videoController != null)
-                                      SizedBox.expand(
-                                        child: FittedBox(
-                                          fit: BoxFit.cover,
-                                          child: SizedBox(
-                                            width: _videoController!.value.size.width,
-                                            height: _videoController!.value.size.height,
-                                            child: VideoPlayer(_videoController!),
-                                          ),
-                                        ),
-                                      ),
-                                    
-                                    // Play/Pause overlay
-                                    if (_videoController != null && !_videoController!.value.isPlaying)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.3),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        padding: const EdgeInsets.all(16),
-                                        child: Icon(
-                                          Icons.play_arrow,
+                              : _error != null
+                                  ? Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline,
                                           size: 48,
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: Colors.red.withOpacity(0.8),
                                         ),
-                                      ),
-                                    
-                                    // Duration overlay (bottom right)
-                                    if (_videoController != null)
-                                      Positioned(
-                                        bottom: 12,
-                                        right: 12,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          _error!,
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.8),
+                                            fontSize: 14,
                                           ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(0.7),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            _formatDuration(_videoController!.value.duration),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
+                                        ),
+                                      ],
+                                    )
+                                  : Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        // Video player
+                                        if (_videoController != null)
+                                          SizedBox.expand(
+                                            child: FittedBox(
+                                              fit: BoxFit.contain,
+                                              child: SizedBox(
+                                                width: _videoController!.value.size.width,
+                                                height: _videoController!.value.size.height,
+                                                child: VideoPlayer(_videoController!),
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                                        
+                                        // Play/Pause overlay
+                                        if (_videoController != null && !_videoController!.value.isPlaying)
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.5),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            padding: const EdgeInsets.all(20),
+                                            child: Icon(
+                                              Icons.play_arrow,
+                                              size: 64,
+                                              color: Colors.white.withOpacity(0.9),
+                                            ),
+                                          ),
+                                        
+                                        // Time display (bottom right)
+                                        if (_videoController != null)
+                                          Positioned(
+                                            bottom: 16,
+                                            right: 16,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(0.7),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                '${_formatDuration(_videoController!.value.position)} / ${_formatDuration(_videoController!.value.duration)}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        
+                                        // Progress bar (bottom)
+                                        if (_videoController != null)
+                                          Positioned(
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                            child: VideoProgressIndicator(
+                                              _videoController!,
+                                              allowScrubbing: true,
+                                              padding: const EdgeInsets.symmetric(vertical: 4),
+                                              colors: VideoProgressColors(
+                                                playedColor: Colors.blue,
+                                                bufferedColor: Colors.white.withOpacity(0.3),
+                                                backgroundColor: Colors.white.withOpacity(0.1),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                      ),
                     ),
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // File info
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
+                    
+                    const SizedBox(height: 16),
+                    
+                    // Action buttons
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
                         children: [
-                          Icon(
-                            Icons.videocam,
-                            color: Colors.white.withOpacity(0.6),
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
+                          // Delete button
                           Expanded(
-                            child: Text(
-                              fileName,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 13,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: _ActionButton(
+                              icon: Icons.delete_outline,
+                              label: 'Delete',
+                              color: Colors.red,
+                              onTap: _deleteVideo,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Share button
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.share,
+                              label: 'Share',
+                              color: Colors.blue,
+                              isPrimary: true,
+                              onTap: _shareVideo,
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Size: ${_formatFileSize(_fileSize)}',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            'Saved: $fileTime',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Action buttons
-                Row(
-                  children: [
-                    // Delete button
-                    Expanded(
-                      child: _ActionButton(
-                        icon: Icons.delete_outline,
-                        label: 'Delete',
-                        color: Colors.red,
-                        onTap: _deleteVideo,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Share button (primary)
-                    Expanded(
-                      flex: 2,
-                      child: _ActionButton(
-                        icon: Icons.share,
-                        label: 'Share Recording',
-                        color: Colors.blue,
-                        isPrimary: true,
-                        onTap: _shareVideo,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              
+              // Close button (top right)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                right: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.onClose,
+                    borderRadius: BorderRadius.circular(30),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        color: Colors.white.withOpacity(0.9),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

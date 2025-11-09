@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'elevenlabs_service.dart';
 import 'models/alignment_data.dart';
+import 'services/screen_recording_service.dart';
 
 class AudioStreamer {
   final ElevenLabsService elevenLabsService;
@@ -48,6 +49,9 @@ class AudioStreamer {
           currentBatch.add(audioChunk.audioBase64!);
           // Calculate actual audio bytes from base64 (base64 is 4/3 the size of original)
           totalAudioBytes += (audioChunk.audioBase64!.length * 3) ~/ 4;
+          
+          // Capture audio for screen recording if active
+          ScreenRecordingService().captureAudioChunk(audioChunk.audioBase64!);
         }
 
         // Process alignment data

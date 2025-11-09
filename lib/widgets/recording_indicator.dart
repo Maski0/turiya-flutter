@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 
 /// A blinking glowing red dot that appears at the top center of the screen during recording
 /// Shows elapsed recording time
+/// Tapping it will stop the recording
 class RecordingIndicator extends StatefulWidget {
   final DateTime startTime;
   final int? maxDurationSeconds; // Optional max duration warning
+  final VoidCallback? onTap; // Callback when tapped to stop recording
   
   const RecordingIndicator({
     Key? key,
     required this.startTime,
     this.maxDurationSeconds,
+    this.onTap,
   }) : super(key: key);
 
   @override
@@ -75,23 +78,27 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
       top: MediaQuery.of(context).padding.top + 10,
       left: 0,
       right: 0,
-      child: Center(
-        child: AnimatedBuilder(
-          animation: _animation,
-          builder: (context, child) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(20),
-                border: isWarning
-                    ? Border.all(
-                        color: Colors.orange.withOpacity(0.6),
-                        width: 1.5,
-                      )
-                    : null,
-              ),
-              child: Row(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _animation,
+            builder: (context, child) {
+              return GestureDetector(
+                onTap: widget.onTap,
+                child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: isWarning
+                      ? Border.all(
+                          color: Colors.orange.withOpacity(0.6),
+                          width: 1.5,
+                        )
+                      : null,
+                ),
+                child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Glowing dot with shadow
@@ -133,22 +140,24 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
                           .withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child:                       Text(
-                        _formatDuration(_elapsed),
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.95),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          fontFeatures: const [
-                            FontFeature.tabularFigures(),
-                          ],
-                        ),
+                    child: Text(
+                      _formatDuration(_elapsed),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.95),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [
+                          FontFeature.tabularFigures(),
+                        ],
                       ),
+                    ),
                   ),
                 ],
               ),
+              ),
             );
           },
+          ),
         ),
       ),
     );
