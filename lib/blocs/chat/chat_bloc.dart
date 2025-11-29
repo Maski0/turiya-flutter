@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/cache_service.dart';
+import '../../services/livekit_service.dart';
 import 'chat_event.dart';
 import 'chat_state.dart';
 
@@ -9,20 +10,38 @@ import 'chat_state.dart';
 class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final BackendApiService _backendApi;
   final CacheService _cacheService;
+  final LiveKitService _liveKitService;
 
   ChatBloc({
     BackendApiService? backendApi,
     required CacheService cacheService,
+    required LiveKitService liveKitService,
   })  : _backendApi = backendApi ?? BackendApiService(),
         _cacheService = cacheService,
+        _liveKitService = liveKitService,
         super(const ChatInitial()) {
     on<ChatMessageSent>(_onMessageSent);
     on<ChatHistoryRequested>(_onHistoryRequested);
     on<ChatHistoryDeleted>(_onHistoryDeleted);
     on<ChatMessagesCleared>(_onMessagesCleared);
     on<ChatLocalMessageAdded>(_onLocalMessageAdded);
+    on<ChatLastAiMessageUpdated>(_onLastAiMessageUpdated);
     on<ChatThreadWatchRequested>(_onThreadWatchRequested);
     on<ChatMessagePlayedStatusUpdated>(_onMessagePlayedStatusUpdated);
+    
+    // Listen to LiveKit messages
+    _liveKitService.onMessageReceived.listen((messageJson) {
+      try {
+        final data = jsonDecode(messageJson);
+        // Assuming the agent sends { "response": "..." } or similar
+        // Adjust based on actual agent output format
+        final content = data['response'] ?? data['message'] ?? messageJson;
+        add(ChatLastAiMessageUpdated(content: content));
+      } catch (e) {
+        // If not JSON, treat as plain text
+        add(ChatLastAiMessageUpdated(content: messageJson));
+      }
+    });
   }
 
   /// Handle sending a message (Observable pattern)
@@ -66,62 +85,19 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       ));
     }
 
+    print('🚀 Sending message via LiveKit (same as beta.turiya.now)...');
+    
     try {
-      // Call backend
-      final response = await _backendApi.invokeAgent(
-        message: event.message,
-        threadId: currentThreadId,
-        model: 'claude-sonnet-4-0',
-        agentId: 'krsna-agent',
-      );
-
-      // Parse response
-      final aiContent = response['content'];
-      final aiData = jsonDecode(aiContent);
-      final krishnaResponse = aiData['response'];
-      final followUps = (aiData['follow_ups'] as List?)?.cast<String>() ?? [];
+      // Send via LiveKit chat (web beta: await sendMessageRef.current(message))
+      // Agent will receive it and respond with audio + text transcription
+      await _liveKitService.sendMessage(event.message);
       
-      // Debug logging
-      print('🔍 Backend response keys: ${aiData.keys.toList()}');
-      print('📝 Follow-ups received: $followUps');
-      print('📊 Follow-ups count: ${followUps.length}');
-
-      // Store thread ID if new
-      final isNewThread = currentThreadId == null;
-      if (isNewThread && response['thread_id'] != null) {
-        currentThreadId = response['thread_id'];
-        // Start watching the new thread
-        add(ChatThreadWatchRequested(currentThreadId!));
-      }
-
-      // Add AI message with isPlayed=false so TTS plays it
-      final aiMessage = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: krishnaResponse,
-        type: 'ai',
-        speaker: 'Kṛṣṇa',
-        isPlayed: false, // Mark as unplayed so TTS will play it
-      );
-      currentMessages.add(aiMessage);
-
-      // Save to cache (this triggers the stream and updates UI)
-      if (currentThreadId != null) {
-        await _cacheService.cacheMessages(
-          currentMessages, 
-          currentThreadId,
-          followUpQuestions: followUps, // Save follow-ups to cache
-        );
-        await _cacheService.saveThreadId(currentThreadId);
-      }
+      print('✅ Message sent via LiveKit chat');
+      print('   Agent will respond with audio track + text transcription');
       
-      // Update follow-up questions in state (stream handles messages)
-      if (state is ChatLoaded) {
-        emit((state as ChatLoaded).copyWith(
-          followUpQuestions: followUps,
-          isGenerating: false,
-          pendingMessage: null, // Clear pending message on successful send
-        ));
-      }
+      // Keep isGenerating=true state
+      // Agent response will come via onMessageReceived listener
+      
     } catch (e) {
       print('❌ Error sending message: $e');
       
@@ -243,6 +219,61 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     ));
   }
   
+  /// Update last AI message (for streaming)
+  Future<void> _onLastAiMessageUpdated(
+    ChatLastAiMessageUpdated event,
+    Emitter<ChatState> emit,
+  ) async {
+    List<ChatMessage> currentMessages = [];
+    String? currentThreadId;
+
+    if (state is ChatLoaded) {
+      final loaded = state as ChatLoaded;
+      currentMessages = List.from(loaded.messages);
+      currentThreadId = loaded.threadId;
+    }
+
+    // Check if last message is AI
+    if (currentMessages.isNotEmpty && currentMessages.last.type == 'ai') {
+      // Update existing message
+      final lastMsg = currentMessages.last;
+      currentMessages[currentMessages.length - 1] = ChatMessage(
+        id: lastMsg.id,
+        content: event.content,
+        type: lastMsg.type,
+        speaker: lastMsg.speaker,
+        isPlayed: lastMsg.isPlayed,
+        timestamp: lastMsg.timestamp,
+      );
+    } else {
+      // Add new message
+      final message = ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: event.content,
+        type: 'ai',
+        speaker: 'Kṛṣṇa',
+        isPlayed: false, // Mark as unplayed so TTS will play it
+      );
+      currentMessages.add(message);
+    }
+
+    // Save to cache if we have a thread ID (this triggers the stream)
+    if (currentThreadId != null) {
+      _cacheService.cacheMessages(
+        currentMessages, 
+        currentThreadId,
+        followUpQuestions: state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : [],
+      );
+    }
+
+    emit(ChatLoaded(
+      messages: currentMessages,
+      threadId: currentThreadId,
+      followUpQuestions: state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : [],
+      isGenerating: false,
+    ));
+  }
+
   /// Start watching a thread for changes (Observable pattern)
   Future<void> _onThreadWatchRequested(
     ChatThreadWatchRequested event,

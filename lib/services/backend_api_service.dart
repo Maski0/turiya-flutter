@@ -30,50 +30,81 @@ class BackendApiService {
     String model = 'claude-sonnet-4-0',
     String agentId = 'krsna-agent',
   }) async {
+    print('🌐 invokeAgent called');
+    print('   Message: "$message"');
+    print('   Thread ID: $threadId');
+    print('   Agent ID: $agentId');
+    
     final token = getAccessToken();
-    if (token == null) throw Exception('Not authenticated');
+    if (token == null) {
+      print('❌ Not authenticated - no access token');
+      throw Exception('Not authenticated');
+    }
 
     final userId = getUserId();
-    if (userId == null) throw Exception('User ID not found');
+    if (userId == null) {
+      print('❌ User ID not found');
+      throw Exception('User ID not found');
+    }
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/$agentId/invoke'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',  // Supabase JWT (same as web!)
+    final url = '$baseUrl/$agentId/invoke';
+    print('📡 Calling: $url');
+    print('   User ID: $userId');
+
+    final requestBody = {
+      'message': message,
+      'model': model,
+      'thread_id': threadId,
+      'user_id': userId,
+      'agent_config': {
+        'spicy_level': 0.8,
       },
-      body: jsonEncode({
-        'message': message,
-        'model': model,
-        'thread_id': threadId,
-        'user_id': userId,
-        'agent_config': {
-          'spicy_level': 0.8,
-        },
-      }),
-    );
+    };
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else if (response.statusCode == 401) {
-      // Token expired, user needs to re-authenticate
-      throw Exception('Authentication expired');
-    } else if (response.statusCode == 402) {
-      throw Exception('Insufficient credits');
-    } else if (response.statusCode == 422) {
-      // Validation error - log details
-      print('❌ 422 Validation Error');
-      print('Request body: ${jsonEncode({
-        'message': message,
-        'model': model,
-        'thread_id': threadId,
-        'user_id': userId,
-        'agent_config': {'spicy_level': 0.8},
-      })}');
-      print('Response: ${response.body}');
-      throw Exception('Validation error: ${response.body}');
-    } else {
-      throw Exception('API call failed: ${response.statusCode} - ${response.body}');
+    print('📤 Request body: ${jsonEncode(requestBody)}');
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',  // Supabase JWT (same as web!)
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          print('⏰ HTTP request timed out after 60 seconds');
+          throw Exception('Request timeout - server did not respond');
+        },
+      );
+
+        print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ Response received: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        // Token expired, user needs to re-authenticate
+        print('❌ 401 Authentication expired');
+        throw Exception('Authentication expired');
+      } else if (response.statusCode == 402) {
+        print('❌ 402 Insufficient credits');
+        throw Exception('Insufficient credits');
+      } else if (response.statusCode == 422) {
+        // Validation error - log details
+        print('❌ 422 Validation Error');
+        print('Request body: ${jsonEncode(requestBody)}');
+        print('Response: ${response.body}');
+        throw Exception('Validation error: ${response.body}');
+      } else {
+        print('❌ API call failed: ${response.statusCode}');
+        print('   Response: ${response.body}');
+        throw Exception('API call failed: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('❌ HTTP request exception: $e');
+      rethrow;
     }
   }
 

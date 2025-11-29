@@ -9,12 +9,13 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import 'elevenlabs_service.dart';
-import 'audio_streamer.dart';
+import 'services/livekit_service.dart';
 import 'services/backend_api_service.dart';
 import 'services/cache_service.dart';
+import 'onboarding/onboarding_gate.dart';
 import 'models/cached_message.dart';
 import 'models/alignment_data.dart';
+import 'models/conversation_mode.dart';
 import 'widgets/glass_button.dart';
 import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
@@ -29,12 +30,12 @@ import 'blocs/auth/auth_bloc_export.dart';
 import 'blocs/chat/chat_bloc_export.dart';
 import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
 
 // Global cache service
 late final CacheService cacheService;
+late final LiveKitService liveKitService;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +59,7 @@ Future<void> main() async {
     directory: dir.path,
   );
   cacheService = CacheService(isar);
+  liveKitService = LiveKitService();
   
   runApp(const ExampleApp());
 }
@@ -70,7 +72,10 @@ class ExampleApp extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (context) => AuthBloc()),
-        BlocProvider(create: (context) => ChatBloc(cacheService: cacheService)),
+        BlocProvider(create: (context) => ChatBloc(
+          cacheService: cacheService,
+          liveKitService: liveKitService,
+        )),
         BlocProvider(create: (context) => CreditsBloc()),
         BlocProvider(create: (context) => MemoryBloc()),
       ],
@@ -80,7 +85,9 @@ class ExampleApp extends StatelessWidget {
           fontFamily: 'Alegreya',
           brightness: Brightness.dark,
         ),
-        home: const _MainScreen(),
+        home: const OnboardingGate(
+          child: _MainScreen(),
+        ),
       ),
     );
   }
@@ -98,8 +105,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   final FocusNode _textFocusNode = FocusNode();
   final BackendApiService _backendApi = BackendApiService();
   final ScrollController _scrollController = ScrollController();
-  late AudioStreamer _audioStreamer;
-  late stt.SpeechToText _speechToText;
+  late LiveKitService _liveKitService;
   bool _isGenerating = false;
   bool _showLoginModal = false;
   bool _showChatSidebar = false;
@@ -126,23 +132,61 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   // Subtitle state
   AlignmentData? _currentAlignment;
   bool _isAudioPlaying = false;
+  String? _liveKitSubtitle;
   
   // Track currently playing message to prevent duplicates
   String? _currentlyPlayingMessageId;
+  
+  // Conversation mode state
+  ConversationMode _conversationMode = ConversationMode.chatAudio;
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize ElevenLabs service to call backend TTS proxy (keeps API key secure)
-    final elevenLabsService = ElevenLabsService(
-      backendUrl: BackendApiService.baseUrl,
-      getAuthToken: () => _backendApi.getAccessToken(),
-    );
-    _audioStreamer = AudioStreamer(elevenLabsService);
+    _liveKitService = liveKitService;
     
-    // Initialize speech to text
-    _speechToText = stt.SpeechToText();
+    // Listen to agent state changes to drive Unity animation and UI state
+    _liveKitService.onAgentStateChanged.listen((state) {
+      if (state == AgentState.speaking) {
+        // Exit "pondering" state and enter "narrating" state
+        if (mounted && _isGenerating) {
+          setState(() {
+            _isGenerating = false; // Exit pondering/loading state
+            _isAudioPlaying = true; // Enter narrating/speaking state
+          });
+          print('🎙️ Agent started speaking - switched from pondering to narrating');
+        }
+        
+        // Note: PCM audio chunks are now sent directly from the backend agent
+        // via data channel and automatically forwarded to Unity by LiveKitService
+        print('🎵 LiveKit audio will be streamed from backend to Unity for lip-sync');
+      } else if (state == AgentState.listening) {
+        // Agent finished speaking - clean up
+        if (mounted) {
+          setState(() {
+            _isAudioPlaying = false;
+            _liveKitSubtitle = null; // Clear subtitle when done
+          });
+          print('✅ Agent finished speaking - cleared narrating state');
+        }
+        
+        // Note: END marker is automatically sent by the backend agent
+        print('🛑 LiveKit audio stream ended');
+      }
+    });
+    
+    // Listen to LiveKit transcriptions for subtitles
+    _liveKitService.onTranscriptionReceived.listen((text) {
+      if (mounted && text.isNotEmpty) {
+        setState(() {
+          _liveKitSubtitle = text;
+        });
+        
+        // Send text to Unity for lip sync (viseme generation from text)
+        sendToUnity("Flutter", "OnLipSyncText", text);
+      }
+    });
     
     // Initialize screen recording service
     _screenRecordingService.setRepaintBoundaryKey(_repaintBoundaryKey);
@@ -255,6 +299,13 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         // 1. Start watching the thread (loads cache instantly)
         // 2. Fetch from backend (updates cache when done)
         // 3. Stream auto-updates UI
+        // Connect to LiveKit
+        final user = supabase.Supabase.instance.client.auth.currentUser;
+        final authToken = supabase.Supabase.instance.client.auth.currentSession?.accessToken;
+        if (user != null && authToken != null) {
+          _liveKitService.connect(threadId, user.id, authToken: authToken);
+        }
+
         print('📤 Dispatching ChatHistoryRequested for thread: $threadId');
         context.read<ChatBloc>().add(ChatHistoryRequested(threadId));
       } else {
@@ -539,6 +590,9 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     _showUserMessageBubble = false; // Hide user message bubble on error recovery
                   });
                   print('✅ Synced state from ChatLoaded: _isGenerating=false, _showUserMessageBubble=false');
+                  
+                  // IMPORTANT: Don't auto-focus text field! User should manually tap to type.
+                  // Prevents keyboard from opening prematurely while Krishna is still speaking.
                 }
               }
               
@@ -555,70 +609,57 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                   }
                   
                   print('✅ Krishna responded: ${message.content.substring(0, min(50, message.content.length))}...');
+                  
+                  // Check conversation mode to decide whether to play audio
+                  if (_conversationMode == ConversationMode.chatChat) {
+                    // CHAT_CHAT mode: Text only, no audio playback
+                    print('💬 CHAT_CHAT mode: Skipping audio playback, showing text only');
+                    
+                    // Mark message as played immediately (no audio wait)
+                    context.read<ChatBloc>().add(ChatMessagePlayedStatusUpdated(
+                      messageId: message.id,
+                      threadId: state.threadId!,
+                      isPlayed: true,
+                    ));
+                    
+                    // Don't set _isAudioPlaying, just reset generating state
+                    if (mounted) {
+                      setState(() {
+                        _isGenerating = false;
+                        _showUserMessageBubble = false;
+                        _showFollowUps = true; // Show follow-ups immediately in text mode
+                      });
+                    }
+                    
+                    // Refresh credits
+                    context.read<CreditsBloc>().add(const CreditsRefreshed());
+                    break;
+                  }
+                  
+                  // CHAT_AUDIO or AUDIO_AUDIO mode: Play audio
                   print('🎵 Playing TTS for message ID: ${message.id}');
                   
                   // Mark this message as currently playing
                   _currentlyPlayingMessageId = message.id;
                   
-                  // Generate TTS with subtitles
-                  try {
-                    print('🎤 Generating TTS with timestamps...');
-                    print('📝 Text for TTS: "${message.content}"');
-                    print('📝 Text length: ${message.content.length} chars');
-                    
-                    // Clear previous alignment and start audio playback immediately
-                    // Keep _isGenerating = true to show "Narrating..." state
-                    if (mounted) {
-                      setState(() {
-                        _currentAlignment = null;
-                        _isAudioPlaying = true; // Start showing subtitles immediately
-                        // _isGenerating stays true - will show "Narrating..." in status widget
-                        _showFollowUps = false; // Hide follow-ups when audio starts
-                      });
-                      print('🔊 Set _isAudioPlaying = true BEFORE streamToUnity at ${DateTime.now()}');
-                      print('🎵 Keeping _isGenerating = true (will show Narrating...)');
-                    }
-                    
-                    // Content is already parsed in ChatMessage.fromJson, use directly
-                    final consolidatedAlignment = await _audioStreamer.streamToUnity(
-                      message.content,
-                      onAlignmentUpdate: (alignment) {
-                        // Update alignment data as chunks arrive - subtitles will update in real-time
-                        if (mounted) {
-                          setState(() {
-                            _currentAlignment = alignment;
-                          });
-                        }
-                      },
-                    );
-                    print('✅ Audio sent to Unity with ${_currentAlignment?.characters.length ?? 0} characters');
-                    print('🎵 All audio chunks sent - Unity is playing with synced subtitles');
-                    
-                    // Use actual audio duration from PCM bytes (includes all audio, even without alignment)
-                    double audioDuration = consolidatedAlignment.actualAudioDurationSeconds;
-                    // Add a small buffer (0.5s) to ensure audio finishes
-                    audioDuration += 0.5;
-                    print('📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
-                    
-                    if (_currentAlignment == null || _currentAlignment!.characterEndTimesSeconds.isEmpty) {
-                      print('⚠️ No alignment data, but audio duration is ${audioDuration}s from PCM bytes');
-                    }
-                    
-                    // Mark message as played
-                    if (_threadId != null) {
-                      context.read<ChatBloc>().add(ChatMessagePlayedStatusUpdated(
-                        messageId: message.id,
-                        threadId: _threadId!,
-                        isPlayed: true,
-                      ));
-                      print('✅ Marked message ${message.id} as played');
-                    }
-                    
-                    // Clear the currently playing message ID
-                    _currentlyPlayingMessageId = null;
-                    
-                    // Stop showing subtitles after the actual audio duration
-                    Future.delayed(Duration(milliseconds: (audioDuration * 1000).toInt()), () async {
+                  // LiveKit handles audio playback automatically.
+                  // We just mark the message as played so we don't process it again.
+                  context.read<ChatBloc>().add(ChatMessagePlayedStatusUpdated(
+                    messageId: message.id,
+                    threadId: state.threadId!,
+                    isPlayed: true,
+                  ));
+                  
+                  // Clear the currently playing message ID
+                  _currentlyPlayingMessageId = null;
+                  
+                  // Simulate audio duration for UI updates (e.g., follow-ups)
+                  // In a real scenario, you'd get this from LiveKit or the TTS service.
+                  // For now, we'll use a placeholder duration.
+                  const double audioDuration = 3.0; // Placeholder for 3 seconds
+                  
+                  // Stop showing subtitles after the actual audio duration
+                  Future.delayed(Duration(milliseconds: (audioDuration * 1000).toInt()), () async {
                       if (mounted) {
                         setState(() {
                           _isAudioPlaying = false;
@@ -656,34 +697,6 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                         }
                       }
                     });
-                  } catch (e) {
-                    print('❌ TTS Error: $e');
-                    // Clear the currently playing message ID on error
-                    _currentlyPlayingMessageId = null;
-                    
-                    // Send END signal to Unity to clean up state
-                    sendToUnity("Flutter", "OnAudioChunk", "END");
-                    print('🏁 END signal sent to Unity (error cleanup)');
-                    
-                    // Hide subtitles immediately on error
-                    if (mounted) {
-                      setState(() {
-                        _isAudioPlaying = false;
-                        _currentAlignment = null;
-                        _showUserMessageBubble = false; // Hide user message on error
-                        _isGenerating = false; // Reset generating state on error
-                      });
-                      
-                      // Show follow-ups after a delay
-                      Future.delayed(const Duration(milliseconds: 400), () {
-                        if (state.followUpQuestions.isNotEmpty && mounted) {
-                          setState(() {
-                            _showFollowUps = true;
-                          });
-                        }
-                      });
-                    }
-                  }
                   
                   // Refresh credits after message sent
                   context.read<CreditsBloc>().add(const CreditsRefreshed());
@@ -803,10 +816,63 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       ),
                     
                     // Real-time subtitles - shows during audio playback
+                    // ElevenLabs alignment-based subtitles (for non-LiveKit audio)
                     if (_isAudioPlaying && _currentAlignment != null)
                       SubtitleWidget(
                         alignment: _currentAlignment,
                         isPlaying: _isAudioPlaying,
+                      ),
+                    
+                    // LiveKit transcription subtitles (glass effect, same design)
+                    if (_isAudioPlaying && _liveKitSubtitle != null && _liveKitSubtitle!.isNotEmpty && _currentAlignment == null)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: MediaQuery.of(context).size.height * 0.25,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                                child: Container(
+                                  constraints: BoxConstraints(
+                                    maxWidth: MediaQuery.of(context).size.width * 0.8,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.white.withOpacity(0.08),
+                                        Colors.white.withOpacity(0.05),
+                                      ],
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _liveKitSubtitle!,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontFamily: 'Alegreya',
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.3,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black45,
+                                          offset: Offset(0, 1),
+                                          blurRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -847,6 +913,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                                   setState(() {
                                     _showChatSidebar = true;
                                     _showChip = false; // Start hidden
+                                    _conversationMode = ConversationMode.chatChat; // Past chats: Text input → Text output (no audio)
                                   });
                                   _animationController.forward();
                                   // Show chip after overlay starts animating
@@ -998,6 +1065,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     _animationController.reverse().then((_) {
                       setState(() {
                         _showChatSidebar = false;
+                        _conversationMode = ConversationMode.chatAudio; // Back to default: Text input → Audio output
                       });
                     });
                   },
@@ -1156,7 +1224,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         ),
         ), // Close GestureDetector
       ),
-        ), // Close PopScope
+        ), // Close Scaffold and PopScope
     );
   }
 
@@ -1171,57 +1239,39 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       return;
     }
 
-    bool available = await _speechToText.initialize(
-      onError: (error) {
-        print('❌ STT Error: $error');
-        if (mounted) {
-          setState(() {
-            _isRecording = false;
-          });
-        }
-      },
-      onStatus: (status) {
-        print('🎤 STT Status: $status');
-        if (status == 'done' || status == 'notListening') {
-          if (mounted && _isRecording) {
-            setState(() {
-              _isRecording = false;
-            });
-          }
-        }
-      },
-    );
-
-    if (available) {
-      setState(() {
-        _isRecording = true;
-        _textController.clear();
-      });
-
-      await _speechToText.listen(
-        onResult: (result) {
-          setState(() {
-            _textController.text = result.recognizedWords;
-          });
-        },
-        listenMode: stt.ListenMode.confirmation,
-      );
-    } else {
+    try {
+      // Enable microphone for AUDIO_AUDIO mode (speak → Krishna speaks)
+      await _liveKitService.setMicrophoneEnabled(true);
+      print('🎙️ Microphone enabled - switching to AUDIO_AUDIO mode');
+      
       if (mounted) {
-        ToastUtils.showError(context, 'Speech recognition not available');
+        setState(() {
+          _isRecording = true;
+          _conversationMode = ConversationMode.audioAudio; // Voice input → Voice output
+        });
+      }
+    } catch (e) {
+      print('❌ Error enabling microphone: $e');
+      if (mounted) {
+        ToastUtils.showError(context, 'Failed to enable microphone');
       }
     }
   }
 
   Future<void> _stopListening() async {
-    await _speechToText.stop();
-    setState(() {
-      _isRecording = false;
-    });
-    
-    // Auto-submit if we have text
-    if (_textController.text.trim().isNotEmpty) {
-      _sendMessage(_textController.text, context);
+    try {
+      // Disable microphone and switch back to CHAT_AUDIO mode (type → Krishna speaks)
+      await _liveKitService.setMicrophoneEnabled(false);
+      print('💬 Microphone disabled - switching back to CHAT_AUDIO mode');
+      
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _conversationMode = ConversationMode.chatAudio; // Text input → Audio output
+        });
+      }
+    } catch (e) {
+      print('❌ Error disabling microphone: $e');
     }
   }
 
@@ -1267,6 +1317,14 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       _showUserMessageBubble = true;
       _showFollowUps = false; // Hide follow-ups when sending message
     });
+    
+    // IMPORTANT: Unfocus text field after sending message to prevent keyboard from reopening
+    // The keyboard will only open when user explicitly taps the input field
+    if (_textFocusNode.hasFocus) {
+      _textFocusNode.unfocus();
+      FocusScope.of(context).unfocus();
+      print('⌨️ Unfocused text field after sending message (prevents keyboard reopening)');
+    }
 
     // Clear input field immediately
     _textController.clear();

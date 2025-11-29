@@ -61,6 +61,18 @@ class ChatLocalMessageAdded extends ChatEvent {
   List<Object?> get props => [content, type];
 }
 
+/// Update the last AI message (for streaming)
+class ChatLastAiMessageUpdated extends ChatEvent {
+  final String content;
+
+  const ChatLastAiMessageUpdated({
+    required this.content,
+  });
+
+  @override
+  List<Object?> get props => [content];
+}
+
 /// Start watching a thread (Observable pattern)
 class ChatThreadWatchRequested extends ChatEvent {
   final String threadId;
