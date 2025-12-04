@@ -23,50 +23,45 @@ class DailyBlessingsScreen extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      progress: 0.875, // 7/8
-      showBackButton: true,
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Would you like to receive daily blessings from Krśna?',
-              style: OnboardingTheme.headingMedium,
-              textAlign: TextAlign.start,
+    // Return content only - wrapper handles scaffold
+    return Column(
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Text(
+            'Would you like to receive daily blessings from Krśna?',
+            style: OnboardingTheme.headingMedium,
+            textAlign: TextAlign.start,
+          ),
+        ),
+        const Spacer(),
+        // Logo
+        SizedBox(
+          width: 98.5,
+          height: 156.3,
+          child: SvgPicture.asset(
+            'assets/images/onboarding/logo.svg',
+            fit: BoxFit.contain,
+          ),
+        ),
+        const Spacer(),
+        // Buttons
+        Column(
+          children: [
+            OnboardingButton(
+              text: 'Yes',
+              onPressed: () => _handleResponse(true),
             ),
-          ),
-          const Spacer(),
-          // Logo
-          SizedBox(
-            width: 98.5,
-            height: 156.3,
-            child: SvgPicture.asset(
-              'assets/images/onboarding/logo.svg',
-              fit: BoxFit.contain,
+            const SizedBox(height: 0), // No gap between buttons
+            OnboardingButton(
+              text: 'Not now',
+              onPressed: () => _handleResponse(false),
+              isOutlined: true,
             ),
-          ),
-          const Spacer(),
-          // Buttons
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: OnboardingButton(
-                  text: 'Yes',
-                  onPressed: () => _handleResponse(true),
-                  isOutlined: true,
-                ),
-              ),
-              OnboardingButton(
-                text: 'Not now',
-                onPressed: () => _handleResponse(false),
-              ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }

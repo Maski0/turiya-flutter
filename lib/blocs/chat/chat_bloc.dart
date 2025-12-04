@@ -86,7 +86,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     }
 
     print('🚀 Sending message via LiveKit (same as beta.turiya.now)...');
-    
+
     try {
       // Send via LiveKit chat (web beta: await sendMessageRef.current(message))
       // Agent will receive it and respond with audio + text transcription

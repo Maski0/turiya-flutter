@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -64,10 +63,6 @@ class ScreenRecordingService {
   DateTime? _audioStartTime; // Track when audio playback actually begins
   int _skippedFrames = 0; // Count skipped frames for diagnostics
   
-  // Audio capture mode
-  bool _captureInternalAudioOnly = false; // If true, only captures app audio (no microphone)
-  List<String> _internalAudioChunks = []; // Store audio chunks from ElevenLabs
-  
   // Isolate for parallel frame processing
   Isolate? _frameProcessingIsolate;
   SendPort? _frameProcessingSendPort;
@@ -88,50 +83,10 @@ class ScreenRecordingService {
     _repaintBoundaryKey = key;
   }
   
-  /// Set audio capture mode
-  /// [internalOnly] - If true, only captures app audio (no microphone)
-  void setAudioCaptureMode({required bool internalOnly}) {
-    _captureInternalAudioOnly = internalOnly;
-    debugPrint('🎤 Audio capture mode set to: ${internalOnly ? "Internal only (no mic)" : "Microphone"}');
-    debugPrint('   Current recording status: ${_isRecording ? "Recording" : "Not recording"}');
-  }
-  
   /// Set processing update callback for UI progress indicator
   /// [callback] - Called with status messages like "Encoding video..." or "Converting audio..."
   void setProcessingCallback(void Function(String message)? callback) {
     _onProcessingUpdate = callback;
-  }
-  
-  /// Call this when audio chunk is received from ElevenLabs (only if recording)
-  /// [audioBase64] - Base64-encoded PCM audio chunk from ElevenLabs
-  void captureAudioChunk(String audioBase64) {
-    // Debug: Log every audio chunk attempt
-    if (!_isRecording) {
-      // Audio chunk received but not recording - this is expected when not recording
-      return;
-    }
-    
-    if (!_captureInternalAudioOnly) {
-      debugPrint('⚠️  Audio chunk received but internal audio mode is OFF (microphone mode)');
-      return;
-    }
-    
-    if (_isRecording && _captureInternalAudioOnly) {
-      // Mark when first audio chunk arrives (for sync)
-      if (_internalAudioChunks.isEmpty && _audioStartTime == null) {
-        _audioStartTime = DateTime.now();
-        if (_recordingStartTime != null) {
-          double delay = _audioStartTime!.difference(_recordingStartTime!).inMilliseconds / 1000.0;
-          debugPrint('🎵 First audio chunk received ${delay.toStringAsFixed(2)}s after recording started');
-        }
-      }
-      _internalAudioChunks.add(audioBase64);
-      
-      // Log progress every 10 chunks
-      if (_internalAudioChunks.length % 10 == 0) {
-        debugPrint('🎵 Captured ${_internalAudioChunks.length} audio chunks so far...');
-      }
-    }
   }
 
   /// Start the frame processing isolate for parallel frame encoding
@@ -204,7 +159,6 @@ class ScreenRecordingService {
       _pendingFrames = 0;
       _recordingStartTime = DateTime.now();
       _audioStartTime = null;
-      _internalAudioChunks.clear();
       
       // Start frame processing isolate for parallel encoding
       await _startFrameProcessingIsolate();
@@ -215,27 +169,23 @@ class ScreenRecordingService {
       Directory framesDir = Directory('${tempDir.path}/frames_$sessionId');
       await framesDir.create(recursive: true);
       
-      // Initialize and start audio recording (skip if internal audio only mode)
-      if (!_captureInternalAudioOnly) {
-        if (!_isRecorderInitialized) {
-          await _audioRecorder.openRecorder();
-          _isRecorderInitialized = true;
-        }
-        
-        var status = await Permission.microphone.request();
-        if (status.isGranted) {
-          Directory? recordingsDir = await getRecordingsDirectory();
-          _audioPath = '${recordingsDir!.path}/audio_$sessionId.aac';
-          await _audioRecorder.startRecorder(
-            toFile: _audioPath,
-            codec: Codec.aacADTS,
-          );
-          debugPrint('🎤 Microphone recording started: $_audioPath');
-        } else {
-          debugPrint('⚠️  WARNING: No microphone permission, recording without audio');
-        }
+      // Initialize and start audio recording (microphone)
+      if (!_isRecorderInitialized) {
+        await _audioRecorder.openRecorder();
+        _isRecorderInitialized = true;
+      }
+      
+      var status = await Permission.microphone.request();
+      if (status.isGranted) {
+        Directory? recordingsDir = await getRecordingsDirectory();
+        _audioPath = '${recordingsDir!.path}/audio_$sessionId.aac';
+        await _audioRecorder.startRecorder(
+          toFile: _audioPath,
+          codec: Codec.aacADTS,
+        );
+        debugPrint('🎤 Microphone recording started: $_audioPath');
       } else {
-        debugPrint('🔇 Skipping microphone - will capture internal audio only');
+        debugPrint('⚠️  WARNING: No microphone permission, recording without audio');
       }
       
       _isRecording = true;
@@ -362,43 +312,17 @@ class ScreenRecordingService {
       // Stop the frame processing isolate
       await _stopFrameProcessingIsolate();
       
-      // Stop audio recording and process based on mode
-      debugPrint('🎤 Audio capture mode: ${_captureInternalAudioOnly ? "Internal" : "Microphone"}');
-      debugPrint('🎤 Number of audio chunks captured: ${_internalAudioChunks.length}');
-      
-      if (_captureInternalAudioOnly) {
-        // Internal audio mode - save captured chunks
-        if (_internalAudioChunks.isEmpty) {
-          debugPrint('❌ ERROR: No internal audio chunks were captured!');
-          debugPrint('   This means audio was either:');
-          debugPrint('   1. Not playing during recording');
-          debugPrint('   2. Not being sent to captureAudioChunk()');
-          debugPrint('   3. Recording started after audio finished');
-          _audioPath = null;
+      // Stop audio recording (microphone)
+      if (_isRecorderInitialized) {
+        await _audioRecorder.stopRecorder();
+        debugPrint('🎤 Microphone recording stopped: $_audioPath');
+        
+        // Check audio file size/duration
+        if (_audioPath != null && File(_audioPath!).existsSync()) {
+          final audioSize = await File(_audioPath!).length();
+          debugPrint('📦 Audio file size: ${(audioSize / 1024).toStringAsFixed(2)} KB');
         } else {
-          _onProcessingUpdate?.call('Converting audio...');
-          debugPrint('💾 Saving ${_internalAudioChunks.length} internal audio chunks...');
-          _audioPath = await _saveInternalAudioChunks();
-          if (_audioPath != null) {
-            final audioSize = await File(_audioPath!).length();
-            debugPrint('✅ Internal audio saved: $_audioPath (${(audioSize / 1024).toStringAsFixed(2)} KB)');
-          } else {
-            debugPrint('⚠️  WARNING: Failed to save internal audio - will have no audio in video');
-          }
-        }
-      } else {
-        // Microphone mode - stop recorder
-        if (_isRecorderInitialized) {
-          await _audioRecorder.stopRecorder();
-          debugPrint('🎤 Microphone recording stopped: $_audioPath');
-          
-          // Check audio file size/duration
-          if (_audioPath != null && File(_audioPath!).existsSync()) {
-            final audioSize = await File(_audioPath!).length();
-            debugPrint('📦 Audio file size: ${(audioSize / 1024).toStringAsFixed(2)} KB');
-          } else {
-            debugPrint('⚠️  WARNING: Audio file does not exist or path is null');
-          }
+          debugPrint('⚠️  WARNING: Audio file does not exist or path is null');
         }
       }
       
@@ -564,7 +488,6 @@ class ScreenRecordingService {
       
       // Clear all state variables to prevent memory leaks
       _framePaths.clear();
-      _internalAudioChunks.clear();
       _frameCount = 0;
       _skippedFrames = 0;
       _pendingFrames = 0;
@@ -677,61 +600,5 @@ class ScreenRecordingService {
       debugPrint('ERROR getting recordings: $e');
     }
     return [];
-  }
-  
-  /// Save internal audio chunks (from ElevenLabs) to a file
-  /// Returns the path to the saved AAC audio file
-  Future<String?> _saveInternalAudioChunks() async {
-    try {
-      if (_internalAudioChunks.isEmpty) {
-        debugPrint('⚠️  No internal audio chunks to save');
-        return null;
-      }
-      
-      Directory? recordingsDir = await getRecordingsDirectory();
-      if (recordingsDir == null) return null;
-      
-      String sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-      String pcmPath = '${recordingsDir.path}/audio_${sessionId}_internal.pcm';
-      String aacPath = '${recordingsDir.path}/audio_${sessionId}_internal.aac';
-      
-      // Decode base64 chunks and write to PCM file
-      File pcmFile = File(pcmPath);
-      IOSink sink = pcmFile.openWrite();
-      
-      for (String chunk in _internalAudioChunks) {
-        Uint8List bytes = base64Decode(chunk);
-        sink.add(bytes);
-      }
-      
-      await sink.flush();
-      await sink.close();
-      
-      final pcmSize = await pcmFile.length();
-      debugPrint('📦 PCM file created: ${(pcmSize / 1024).toStringAsFixed(2)} KB');
-      
-      // Convert PCM to AAC using FFmpeg
-      // ElevenLabs uses: 24000 Hz, mono, 16-bit PCM
-      String ffmpegCommand = '-f s16le -ar 24000 -ac 1 -i "$pcmPath" -c:a aac -b:a 192k "$aacPath"';
-      debugPrint('🔄 Converting PCM to AAC: $ffmpegCommand');
-      
-      final session = await FFmpegKit.execute(ffmpegCommand);
-      final returnCode = await session.getReturnCode();
-      
-      if (ReturnCode.isSuccess(returnCode)) {
-        // Delete PCM file (no longer needed)
-        await pcmFile.delete();
-        debugPrint('✅ PCM converted to AAC successfully');
-        return aacPath;
-      } else {
-        final output = await session.getOutput();
-        debugPrint('❌ FFmpeg PCM conversion failed: $output');
-        await pcmFile.delete();
-        return null;
-      }
-    } catch (e) {
-      debugPrint('❌ ERROR saving internal audio: $e');
-      return null;
-    }
   }
 }

@@ -120,8 +120,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
         }
       }
     } else {
-      // Start recording with internal audio only (no microphone)
-      _recordingService.setAudioCaptureMode(internalOnly: true);
+      // Start recording with microphone audio
       bool started = await _recordingService.startRecording();
       
       setState(() {
@@ -266,8 +265,7 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
         }
       }
     } else {
-      // Start recording with internal audio only (no microphone)
-      _recordingService.setAudioCaptureMode(internalOnly: true);
+      // Start recording with microphone audio
       bool started = await _recordingService.startRecording();
       setState(() {
         _isRecording = started;

@@ -23,21 +23,36 @@ class OnboardingRadioOption extends StatelessWidget {
       child: Container(
         height: 64,
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          border: Border.all(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
             color: isSelected
-                ? OnboardingTheme.textPrimary.withOpacity(0.6)
-                : OnboardingTheme.textPrimary.withOpacity(0.15),
-            width: isSelected ? 1.5 : 1,
+                ? const Color(0x80000000) // 50% Black for selected
+                : const Color(0x40000000), // 25% Black for unselected (rgba(0,0,0,0.25))
+            border: Border.all(
+              color: isSelected
+                  ? Colors.white // Solid white border for selected
+                  : OnboardingTheme.textPrimary.withOpacity(0.15),
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0x14111111), // rgba(17,17,17,0.08)
+                offset: const Offset(0, 4),
+                blurRadius: 16,
+                spreadRadius: 0,
+              ),
+            ],
           ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
+          child: Row(
           children: [
             // Radio button / Checkbox
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
               width: OnboardingTheme.radioButtonSize,
               height: OnboardingTheme.radioButtonSize,
               decoration: BoxDecoration(
@@ -52,24 +67,29 @@ class OnboardingRadioOption extends StatelessWidget {
                     ? OnboardingTheme.textPrimary
                     : Colors.transparent,
               ),
-              child: isSelected
-                  ? (showCheckmark
-                      ? const Icon(
-                          Icons.check,
-                          color: OnboardingTheme.backgroundDark,
-                          size: 12,
-                        )
-                      : Center(
-                          child: Container(
-                            width: OnboardingTheme.radioButtonInnerSize,
-                            height: OnboardingTheme.radioButtonInnerSize,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: OnboardingTheme.radioSelected,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 100),
+                child: isSelected
+                    ? (showCheckmark
+                        ? const Icon(
+                            Icons.check,
+                            color: OnboardingTheme.backgroundDark,
+                            size: 12,
+                            key: ValueKey('check'),
+                          )
+                        : Center(
+                            child: Container(
+                              key: const ValueKey('inner'),
+                              width: OnboardingTheme.radioButtonInnerSize,
+                              height: OnboardingTheme.radioButtonInnerSize,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: OnboardingTheme.radioSelected,
+                              ),
                             ),
-                          ),
-                        ))
-                  : null,
+                          ))
+                    : const SizedBox.shrink(key: ValueKey('empty')),
+              ),
             ),
             const SizedBox(width: 16),
             // Label
@@ -83,6 +103,7 @@ class OnboardingRadioOption extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

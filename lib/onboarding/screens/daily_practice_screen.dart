@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import '../theme/onboarding_theme.dart';
-import '../widgets/onboarding_scaffold.dart';
 import '../widgets/onboarding_button.dart';
 import '../models/onboarding_data.dart';
 
@@ -75,56 +75,75 @@ class _DailyPracticeScreenState extends State<DailyPracticeScreen> {
   
   @override
   Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      progress: 0.875, // 7/8
-      showBackButton: true,
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'How would you like to shape your daily practice?',
-              style: OnboardingTheme.headingMedium,
-              textAlign: TextAlign.start,
-            ),
+    const double buttonHeightWithPadding = 80; // 64 + 8 + 8
+    
+    return Stack(
+      children: [
+        // Scrollable content with bottom padding
+        ListView.builder(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 0,
+            bottom: buttonHeightWithPadding + 16, // Extra space for last item visibility
           ),
-          const SizedBox(height: 40),
-          // Options
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: options.length,
-              itemBuilder: (context, index) {
-                final option = options[index];
-                final title = option['title']!;
-                final subtitle = option['subtitle']!;
-                final icon = _getIcon(option['icon']!);
-                final isSelected = selected.contains(title);
-                
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        selected.remove(title);
-                      } else {
-                        selected.add(title);
-                      }
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.03),
-                      border: Border.all(
-                        color: isSelected 
-                            ? OnboardingTheme.textPrimary.withOpacity(0.4)
-                            : OnboardingTheme.textPrimary.withOpacity(0.15),
-                        width: 1,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
+          itemCount: options.length + 1, // +1 for header
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              // Header
+              return Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, top: 16, bottom: 40),
+                child: Text(
+                  'How would you like to shape your daily practice?',
+                  style: OnboardingTheme.headingMedium,
+                  textAlign: TextAlign.start,
+                ),
+              );
+            }
+            
+            final optionIndex = index - 1;
+            final option = options[optionIndex];
+            final title = option['title']!;
+            final subtitle = option['subtitle']!;
+            final icon = _getIcon(option['icon']!);
+            final isSelected = selected.contains(title);
+            
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    selected.remove(title);
+                  } else {
+                    selected.add(title);
+                  }
+                });
+              },
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0x80000000) // 50% Black for selected
+                        : const Color(0x40000000), // 25% Black for unselected (rgba(0,0,0,0.25))
+                    border: Border.all(
+                      color: isSelected 
+                          ? Colors.white // Solid white for selected
+                          : OnboardingTheme.textPrimary.withOpacity(0.15),
+                      width: 1,
                     ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0x14111111), // rgba(17,17,17,0.08)
+                        offset: const Offset(0, 4),
+                        blurRadius: 16,
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -183,17 +202,22 @@ class _DailyPracticeScreenState extends State<DailyPracticeScreen> {
                       ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-          // Continue button
-          OnboardingButton(
+        
+        // Fixed button at bottom
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: OnboardingButton(
             text: 'Continue',
             onPressed: selected.isNotEmpty ? _handleSubmit : null,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

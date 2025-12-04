@@ -81,8 +81,8 @@ class OnboardingTheme {
   
   // Border Radius
   static const double borderRadiusS = 8.0;
-  static const double borderRadiusM = 16.0;
-  static const double borderRadiusL = 24.0;
+  static const double borderRadiusM = 12.0;
+  static const double borderRadiusL = 16.0;
   static const double borderRadiusXL = 32.0;
   static const double borderRadiusFull = 999.0;
   

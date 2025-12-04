@@ -31,12 +31,13 @@ class LiveKitService {
   final _messageController = StreamController<String>.broadcast();
   final _agentStateController = StreamController<AgentState>.broadcast();
   final _audioTrackController = StreamController<RemoteAudioTrack?>.broadcast();
-  final _transcriptionController = StreamController<String>.broadcast();
+  final _userTranscriptionController = StreamController<String>.broadcast();
   
   Stream<String> get onMessageReceived => _messageController.stream;
   Stream<AgentState> get onAgentStateChanged => _agentStateController.stream;
   Stream<RemoteAudioTrack?> get onAudioTrackReceived => _audioTrackController.stream;
-  Stream<String> get onTranscriptionReceived => _transcriptionController.stream;
+  /// Stream of user's speech transcription (for showing in input box)
+  Stream<String> get onUserTranscription => _userTranscriptionController.stream;
   
   // Expose room and roomContext for UI components
   Room? get room => _room;
@@ -48,19 +49,36 @@ class LiveKitService {
   // Track if agent is connected (for message buffering like web frontend)
   bool _isAgentConnected = false;
   String? _agentIdentity;
-  AgentState _agentState = AgentState.disconnected;
   final List<String> _messageBuffer = [];
   
   // Buffer for accumulating transcription segments
   final List<String> _transcriptionBuffer = [];
   bool _isProcessingTranscription = false;
   
+  // Track the active responding agent for current interaction
+  // This prevents multiple agents from interfering with each other
+  String? _activeRespondingAgent;
+  
+  // Audio playback tracking - calculate duration from PCM bytes
+  int _totalAudioBytes = 0;
+  Timer? _audioPlaybackTimer;
+  
+  // Timeout handling for stuck states
+  Timer? _thinkingTimeout;
+  Timer? _connectingTimeout;
+  static const Duration _thinkingTimeoutDuration = Duration(seconds: 30);
+  static const Duration _connectingTimeoutDuration = Duration(seconds: 15);
+  
+  // Error state stream
+  final _errorController = StreamController<String>.broadcast();
+  Stream<String> get onError => _errorController.stream;
+  
   bool get isAgentConnected => _isAgentConnected;
   String? get agentIdentity => _agentIdentity;
-  AgentState get agentState => _agentState;
+  AgentState get agentState => _currentState;
   
   /// Check if agent is ready to accept messages (listening, thinking, or speaking)
-  bool get isAgentReady => isAgentAvailable(_agentState);
+  bool get isAgentReady => isAgentAvailable(_currentState);
   
   /// Process buffered messages when agent becomes available
   Future<void> _processMessageBuffer() async {
@@ -79,19 +97,6 @@ class LiveKitService {
     }
   }
   
-  /// Update agent state and process buffer if agent becomes available
-  void _updateAgentState(AgentState newState) {
-    final oldState = _agentState;
-    _agentState = newState;
-    _agentStateController.add(newState);
-    
-    print('🤖 Agent state: $oldState → $newState');
-    
-    // If agent just became available, process buffered messages
-    if (!isAgentAvailable(oldState) && isAgentAvailable(newState)) {
-      _processMessageBuffer();
-    }
-  }
 
   Future<void> connect(String threadId, String userId, {String? authToken}) async {
     try {
@@ -119,6 +124,11 @@ class LiveKitService {
           noiseSuppression: true,
           autoGainControl: true,
         ),
+        // Enable speaker output - Unity plays audio but LiveKit controls device audio routing
+        // Setting speakerOn: true ensures audio routes to speaker, not earpiece
+        defaultAudioOutputOptions: const AudioOutputOptions(
+          speakerOn: true, // Route audio to speaker (Unity audio respects this)
+        ),
       );
       
       print('🔊 Room options configured with audio processing enabled');
@@ -145,28 +155,39 @@ class LiveKitService {
       // 5. Microphone defaults to disabled (user must toggle it)
       await _room!.localParticipant?.setMicrophoneEnabled(false);
       
-      _updateState(AgentState.listening);
+      // Stay in "connecting" state - will transition to "listening" when agent joins
+      // This ensures the text box remains disabled until agent is truly ready
       print('✅ Connected to LiveKit Room: ${_room!.name}');
+      print('⏳ Waiting for agent to join the room...');
       
-      // 6. Enable speakerphone to route audio to loudspeaker (not earpiece)
-      // IMPORTANT: Must be called AFTER room is fully connected
-      print('🔊 Attempting to enable speakerphone...');
-      try {
-        // First, ensure audio output is set to speakerphone
-        await Hardware.instance.setPreferSpeakerOutput(true);
-        print('✅ Set prefer speaker output to true');
-        
-        // Then explicitly enable speakerphone
-        await Hardware.instance.setSpeakerphoneOn(true);
-        print('✅ Enabled speakerphone - audio will route to loudspeaker (not earpiece)');
-        print('   This switches from VOICE_CALL (earpiece) to loudspeaker output');
-      } catch (e) {
-        print('⚠️ Failed to enable speakerphone: $e');
-        print('   Audio may route to earpiece by default');
+      // Check if agent is already in the room (might have joined before us)
+      for (final participant in _room!.remoteParticipants.values) {
+        if (participant.identity.startsWith('agent-')) {
+          print('🤖 Agent already in room: ${participant.identity}');
+          _isAgentConnected = true;
+          _agentIdentity = participant.identity;
+          _connectingTimeout?.cancel();
+          _updateState(AgentState.listening);
+          return;
+        }
       }
+      
+      // Agent not in room yet - stay in connecting state
+      // ParticipantConnectedEvent will handle the transition to listening
+      
+      // Start a timeout - if agent doesn't join in time, show error
+      _connectingTimeout?.cancel();
+      _connectingTimeout = Timer(_connectingTimeoutDuration, () {
+        if (_currentState == AgentState.connecting && !_isAgentConnected) {
+          print('⏰ Connection timeout! Agent did not join in ${_connectingTimeoutDuration.inSeconds}s');
+          _errorController.add('Connection timeout - agent not available. Please try again.');
+          _updateState(AgentState.disconnected);
+        }
+      });
 
     } catch (e) {
       print('❌ LiveKit Connection Error: $e');
+      _connectingTimeout?.cancel();
       _updateState(AgentState.disconnected);
       rethrow;
     }
@@ -229,12 +250,95 @@ class LiveKitService {
           }
         } else if (event.topic == 'audio_pcm') {
           // Handle PCM audio chunks from LiveKit agent for Unity lip-sync
-          // Format: "CHUNK|base64_pcm_data" or "END"
+          // Format: "START", "CHUNK|base64_pcm_data", or "END|total_bytes"
           try {
             final data = utf8.decode(event.data);
-            print('🎵 PCM Audio Chunk Received: ${data.substring(0, min(50, data.length))}... (for Unity lip-sync)');
+            final senderIdentity = event.participant?.identity ?? 'unknown';
             
-            // Forward to Unity (same format as ElevenLabs)
+            // Only process messages from agents
+            if (!senderIdentity.startsWith('agent-')) {
+              return;
+            }
+            
+            // Lock onto the first agent that sends START for this interaction
+            // Ignore all other agents until END is received
+            if (data == 'START') {
+              if (_activeRespondingAgent == null) {
+                _activeRespondingAgent = senderIdentity;
+                print('🎯 Locked onto agent: $senderIdentity for this response');
+              } else if (_activeRespondingAgent != senderIdentity) {
+                print('⚠️ IGNORING START from $senderIdentity (locked to $_activeRespondingAgent)');
+                return;
+              }
+            } else if (_activeRespondingAgent != null && senderIdentity != _activeRespondingAgent) {
+              // Ignore messages from other agents while we're locked onto one
+              return;
+            }
+            
+            print('🎵 audio_pcm from $senderIdentity: ${data.length > 50 ? data.substring(0, 50) + "..." : data}');
+            
+            if (data == 'START') {
+              // Audio starting
+              print('🎬 [${senderIdentity}] START marker received');
+              _totalAudioBytes = 0;
+              _audioPlaybackTimer?.cancel();
+              
+              // Ensure we're in speaking state
+              if (_currentState != AgentState.speaking) {
+                _updateState(AgentState.speaking);
+              }
+            } else if (data.startsWith('CHUNK|')) {
+              // CHUNK|base64_audio - track bytes for duration
+              final base64Data = data.substring(6);
+              try {
+                final bytes = base64Decode(base64Data);
+                _totalAudioBytes += bytes.length;
+              } catch (e) {
+                // Ignore decode errors
+              }
+            } else if (data.startsWith('END|')) {
+              // END|total_bytes - TTS complete
+              final totalBytes = int.tryParse(data.substring(4)) ?? _totalAudioBytes;
+              
+              print('🏁 [${senderIdentity}] END received - $totalBytes bytes');
+              
+              // Calculate audio duration
+              const int sampleRate = 22050;
+              const int bytesPerSample = 2;
+              final int totalSamples = totalBytes ~/ bytesPerSample;
+              final double audioDurationSeconds = totalSamples / sampleRate;
+              
+              print('📊 Audio: ${audioDurationSeconds.toStringAsFixed(2)}s');
+              
+              // Timer to transition to listening after playback
+              final playbackDuration = Duration(milliseconds: (audioDurationSeconds * 1000).toInt() + 500);
+              
+              _audioPlaybackTimer = Timer(playbackDuration, () {
+                print('🎵 Playback finished - transitioning to listening');
+                _activeRespondingAgent = null;
+                
+                if (_currentState == AgentState.speaking) {
+                  _updateState(AgentState.listening);
+                }
+              });
+            } else if (data == 'END') {
+              // Legacy END without bytes
+              print('🏁 [${senderIdentity}] Legacy END');
+              const int sampleRate = 22050;
+              const int bytesPerSample = 2;
+              final int totalSamples = _totalAudioBytes ~/ bytesPerSample;
+              final double audioDurationSeconds = totalSamples / sampleRate;
+              
+              final playbackDuration = Duration(milliseconds: (audioDurationSeconds * 1000).toInt() + 500);
+              _audioPlaybackTimer = Timer(playbackDuration, () {
+                _activeRespondingAgent = null;
+                if (_currentState == AgentState.speaking) {
+                  _updateState(AgentState.listening);
+                }
+              });
+            }
+            
+            // Forward all data to Unity (START, CHUNK|..., END)
             sendToUnity("Flutter", "OnAudioChunk", data);
           } catch (e) {
             print('❌ Error processing PCM audio chunk: $e');
@@ -254,25 +358,16 @@ class LiveKitService {
         print('🎤 TrackSubscribedEvent - Track: ${event.track.runtimeType}, Sid: ${event.track.sid}');
         print('   Participant: ${event.participant.identity}, Kind: ${event.track.kind}');
         if (event.track is RemoteAudioTrack) {
-          print('✅ Audio Track Subscribed');
-          final audioTrack = event.track as RemoteAudioTrack;
+          print('🔇 Audio Track Subscribed - STOPPING to prevent WebRTC playback');
           
-          // Enable the audio track
           try {
-            await audioTrack.enable();
-            print('🔊 Enabled audio track for playback');
-            
-            // Re-ensure speakerphone is on when audio track arrives
-            // Sometimes audio routing can change when new tracks are added
-            await Hardware.instance.setSpeakerphoneOn(true);
-            print('🔊 Re-confirmed speakerphone is ON for audio playback');
+            // Stop the audio track completely to prevent WebRTC audio
+            final audioTrack = event.track as RemoteAudioTrack;
+            await audioTrack.stop();
+            print('✅ Stopped audio track ${audioTrack.sid} - WebRTC audio disabled');
           } catch (e) {
-            print('⚠️ Error configuring audio track: $e');
+            print('⚠️ Error stopping audio track: $e');
           }
-          
-          _audioTrackController.add(audioTrack);
-          // On mobile, flutter_webrtc handles audio playback automatically
-          // when the track is enabled.
         }
       })
       ..on<TrackUnsubscribedEvent>((event) {
@@ -296,22 +391,34 @@ class LiveKitService {
           print('🤖 Agent connected!');
           _isAgentConnected = true;
           _agentIdentity = event.participant.identity;
-          _updateAgentState(AgentState.connecting);
           
-          // Wait a moment for agent to initialize, then mark as listening (ready)
-          Future.delayed(const Duration(milliseconds: 1000), () {
-            if (_isAgentConnected) {
-              _updateAgentState(AgentState.listening);
-            }
-          });
+          // Cancel connecting timeout - agent is here!
+          _connectingTimeout?.cancel();
+          _connectingTimeout = null;
+          
+          // Agent connected - mark as listening (ready to receive messages)
+          // This will also process any buffered messages
+          _updateState(AgentState.listening);
+        }
+      })
+      ..on<TrackPublishedEvent>((event) async {
+        print('📢 TrackPublishedEvent - Kind: ${event.publication.kind}, Sid: ${event.publication.sid}');
+        print('   Participant: ${event.participant.identity}');
+        
+        // CRITICAL: Unsubscribe from audio tracks to prevent WebRTC audio playback
+        // We play audio through Unity via PCM data channel instead
+        if (event.publication.kind == TrackType.AUDIO) {
+          print('🔇 Audio track published - UNSUBSCRIBING to prevent WebRTC playback');
+          try {
+            await event.publication.unsubscribe();
+            print('✅ Unsubscribed from WebRTC audio track: ${event.publication.sid}');
+          } catch (e) {
+            print('⚠️ Error unsubscribing from audio track: $e');
+          }
         }
       })
       ..on<ParticipantDisconnectedEvent>((event) {
         print('👋 ParticipantDisconnectedEvent - Identity: ${event.participant.identity}');
-      })
-      ..on<TrackPublishedEvent>((event) {
-        print('📡 TrackPublishedEvent - Track: ${event.publication.track?.runtimeType}, Sid: ${event.publication.sid}');
-        print('   Participant: ${event.participant.identity}, Kind: ${event.publication.kind}');
       })
       ..on<TrackUnpublishedEvent>((event) {
         print('📴 TrackUnpublishedEvent - Sid: ${event.publication.sid}');
@@ -338,96 +445,81 @@ class LiveKitService {
         }
         
         bool isAgentSpeaking = false;
+        bool isUserSpeaking = false;
+        
         for (final p in event.speakers) {
           if (p is RemoteParticipant) {
             isAgentSpeaking = true;
-            break;
+          } else if (p is LocalParticipant) {
+            isUserSpeaking = true;
           }
         }
         
-        if (isAgentSpeaking) {
-          // Agent started speaking - ensure speakerphone is still on
-          try {
-            await Hardware.instance.setSpeakerphoneOn(true);
-            print('🔊 Speakerphone re-enabled for agent speech');
-          } catch (e) {
-            print('⚠️ Could not re-enable speakerphone: $e');
-          }
-          
+        if (isAgentSpeaking && !isUserSpeaking) {
+          // Agent started speaking (and user is not speaking)
+          // NOTE: WebRTC audio is disabled - audio plays through Unity via PCM data channel
           _updateState(AgentState.speaking);
-        } else {
-          // Agent stopped speaking - finalize transcription
-          if (_currentState == AgentState.speaking && _isProcessingTranscription) {
-            _finalizeTranscription();
-          }
-          
-          // Revert to listening
+        } else if (isUserSpeaking) {
+          // User is speaking - handle interruption or state change
           if (_currentState == AgentState.speaking) {
+            // INTERRUPTION: User started speaking while agent was speaking
+            print('🛑 INTERRUPTION: User started speaking while agent was speaking - stopping audio');
+            _handleInterruption();
+          } else if (_currentState == AgentState.thinking) {
+            // User started talking again while we were thinking - back to listening
+            print('🎤 User started speaking again - back to listening');
             _updateState(AgentState.listening);
+          }
+        } else {
+          // No one is speaking
+          final micEnabled = _room?.localParticipant?.isMicrophoneEnabled() ?? false;
+          
+          if (micEnabled && _currentState == AgentState.listening) {
+            // User just stopped speaking in voice mode - agent is processing
+            print('🤔 User stopped speaking - agent is thinking...');
+            _updateState(AgentState.thinking);
+          } else if (_currentState == AgentState.speaking && _isProcessingTranscription) {
+            // Agent stopped speaking - finalize transcription
+            _finalizeTranscription();
+            // NOTE: State transition to listening is handled by audio_pcm END marker
+            print('🔇 Agent voice activity stopped (waiting for audio END marker)');
           }
         }
       })
       ..on<TranscriptionEvent>((event) {
-        // Handle agent transcriptions (subtitles + lip sync)
+        // Handle transcriptions from both agent and user
         print('📝 TranscriptionEvent received');
         print('   Participant: ${event.participant.identity}');
         print('   Segments: ${event.segments.length}');
         
-        // Only process agent's transcriptions (not user's own)
         if (event.participant is RemoteParticipant) {
-          // Mark that agent is responding (exit pondering state)
+          // Agent's transcription - for state management
           if (!_isProcessingTranscription) {
             _isProcessingTranscription = true;
             _transcriptionBuffer.clear();
             _updateState(AgentState.speaking);
             
-            // Send START marker to Unity when agent starts speaking
-            // This prepares Unity to receive PCM audio chunks for lip-sync
-            sendToUnity("Flutter", "OnAudioChunk", "START");
-            print('🎬 Sent START marker to Unity for LiveKit audio playback');
+            print('🎙️ Agent started speaking (transcription received)');
           }
           
           for (final segment in event.segments) {
-            print('   📝 Segment: "${segment.text}" (final: ${segment.isFinal})');
-            
-            // Extract plain text from JSON response (agent sends JSON-formatted text)
-            String displayText = segment.text;
-            try {
-              // Try to parse as complete JSON first
-              if (segment.text.contains('{"response":')) {
-                final jsonData = jsonDecode(segment.text);
-                if (jsonData is Map && jsonData.containsKey('response')) {
-                  displayText = jsonData['response'] as String;
-                }
-              } else {
-                // Partial JSON - extract text after "response":"
-                final match = RegExp(r'"response":"([^"]*)"?').firstMatch(segment.text);
-                if (match != null && match.group(1) != null) {
-                  displayText = match.group(1)!;
-                }
-              }
-            } catch (e) {
-              // If JSON parsing fails, try regex extraction
-              final match = RegExp(r'"response":"([^"]*)"?').firstMatch(segment.text);
-              if (match != null && match.group(1) != null) {
-                displayText = match.group(1)!;
-              }
-            }
-            
-            // Send extracted text to UI for live subtitles
-            if (displayText.isNotEmpty && !displayText.startsWith('{')) {
-              _transcriptionController.add(displayText);
-              print('   📺 Subtitle: "$displayText"');
-            }
+            print('   📝 Agent: "${segment.text.substring(0, min(50, segment.text.length))}..." (final: ${segment.isFinal})');
             
             // Accumulate final segments for the complete message
             if (segment.isFinal) {
               _transcriptionBuffer.add(segment.text);
             }
           }
-          
-          // Check if transcription is complete (agent stopped speaking)
-          // We'll detect this via ActiveSpeakersChangedEvent when speakers list is empty
+        } else if (event.participant is LocalParticipant) {
+          // User's transcription - show in input box
+          for (final segment in event.segments) {
+            final text = segment.text.trim();
+            if (text.isNotEmpty) {
+              print('   🎤 User: "$text" (final: ${segment.isFinal})');
+              // Send user's transcription to UI
+              _userTranscriptionController.add(text);
+            }
+          }
         }
       });
   }
@@ -456,7 +548,7 @@ class LiveKitService {
       await _sendMessageInternal(text);
     } else {
       // Buffer message until agent is ready (matches web frontend behavior)
-      print('⏳ Agent not ready yet (state: $_agentState), buffering message');
+      print('⏳ Agent not ready yet (state: $_currentState), buffering message');
       _messageBuffer.add(text);
       print('   Buffered messages: ${_messageBuffer.length}');
     }
@@ -469,7 +561,7 @@ class LiveKitService {
       // See: https://github.com/livekit-examples/agent-starter-flutter
       print('📤 Sending text to LiveKit (topic: lk.chat): "$text"');
       print('   Room: ${_room!.name}');
-      print('   Agent: $_agentIdentity (state: $_agentState)');
+      print('   Agent: $_agentIdentity (state: $_currentState)');
       print('   Local Participant: ${_room!.localParticipant?.identity}');
       
       // Send via sendText() with 'lk.chat' topic (official LiveKit agent protocol)
@@ -570,8 +662,70 @@ class LiveKitService {
   }
 
   void _updateState(AgentState state) {
+    final oldState = _currentState;
     _currentState = state;
     _agentStateController.add(state);
+    
+    print('🤖 Agent state: $oldState → $state');
+    
+    // If agent just became available, process buffered messages
+    if (!isAgentAvailable(oldState) && isAgentAvailable(state)) {
+      _processMessageBuffer();
+    }
+    
+    // Cancel any existing timeout
+    _thinkingTimeout?.cancel();
+    _thinkingTimeout = null;
+    
+    // Start timeout for thinking state
+    if (state == AgentState.thinking) {
+      print('⏱️ Starting thinking timeout (${_thinkingTimeoutDuration.inSeconds}s)');
+      _thinkingTimeout = Timer(_thinkingTimeoutDuration, () {
+        if (_currentState == AgentState.thinking) {
+          print('⏰ Thinking timeout! Resetting to listening state');
+          _errorController.add('Response timeout - please try again');
+          _updateState(AgentState.listening);
+        }
+      });
+    }
+  }
+  
+  /// Handle user interruption - stop audio playback and reset state
+  Future<void> _handleInterruption() async {
+    // Cancel any pending audio playback timer
+    _audioPlaybackTimer?.cancel();
+    _audioPlaybackTimer = null;
+    
+    // Clear the active responding agent
+    _activeRespondingAgent = null;
+    
+    // Reset transcription state
+    _transcriptionBuffer.clear();
+    _isProcessingTranscription = false;
+    _totalAudioBytes = 0;
+    
+    // Send END signal to Unity to stop audio playback immediately
+    sendToUnity("Flutter", "OnAudioChunk", "END");
+    print('🛑 Sent END signal to Unity (interruption - stopping audio)');
+    
+    // Send interrupt command to the agent backend via data channel
+    // The agent has an RPC method "interrupt" but Flutter SDK doesn't support RPC,
+    // so we use data channel with topic "interrupt"
+    try {
+      if (_room != null && _room!.localParticipant != null) {
+        await _room!.localParticipant!.publishData(
+          utf8.encode('interrupt'),
+          topic: 'interrupt',
+          reliable: true,
+        );
+        print('🛑 Sent interrupt command to agent backend');
+      }
+    } catch (e) {
+      print('⚠️ Failed to send interrupt command: $e');
+    }
+    
+    // Transition to listening state (ready for new input)
+    _updateState(AgentState.listening);
   }
   
   /// Finalize transcription when agent stops speaking
@@ -604,10 +758,14 @@ class LiveKitService {
   }
   
   void dispose() {
+    _thinkingTimeout?.cancel();
+    _connectingTimeout?.cancel();
+    _audioPlaybackTimer?.cancel();
     _messageController.close();
     _agentStateController.close();
     _audioTrackController.close();
-    _transcriptionController.close();
+    _errorController.close();
+    _userTranscriptionController.close();
     _roomContext?.dispose();
   }
 }

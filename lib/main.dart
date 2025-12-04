@@ -14,14 +14,12 @@ import 'services/backend_api_service.dart';
 import 'services/cache_service.dart';
 import 'onboarding/onboarding_gate.dart';
 import 'models/cached_message.dart';
-import 'models/alignment_data.dart';
 import 'models/conversation_mode.dart';
 import 'widgets/glass_button.dart';
 import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/menu_drawer.dart';
-import 'widgets/subtitle_widget.dart';
 import 'widgets/profile_avatar_widget.dart';
 import 'widgets/recording_indicator.dart';
 import 'widgets/recording_preview_overlay.dart';
@@ -106,7 +104,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   final BackendApiService _backendApi = BackendApiService();
   final ScrollController _scrollController = ScrollController();
   late LiveKitService _liveKitService;
+  bool _isConnecting = false; // LiveKit connecting state - only true when actively connecting
   bool _isGenerating = false;
+  Timer? _generatingTimeout; // Timeout for stuck pondering state
+  static const Duration _generatingTimeoutDuration = Duration(seconds: 30);
   bool _showLoginModal = false;
   bool _showChatSidebar = false;
   bool _showMenuDrawer = false;
@@ -129,10 +130,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
   String? _lastUserMessage; // Track last sent message
   bool _showUserMessageBubble = false; // Control user message bubble visibility
   
-  // Subtitle state
-  AlignmentData? _currentAlignment;
+  // Audio playback state
   bool _isAudioPlaying = false;
-  String? _liveKitSubtitle;
   
   // Track currently playing message to prevent duplicates
   String? _currentlyPlayingMessageId;
@@ -148,43 +147,122 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     
     // Listen to agent state changes to drive Unity animation and UI state
     _liveKitService.onAgentStateChanged.listen((state) {
-      if (state == AgentState.speaking) {
-        // Exit "pondering" state and enter "narrating" state
-        if (mounted && _isGenerating) {
+      if (state == AgentState.connecting) {
+        // Still connecting to LiveKit
+        if (mounted) {
           setState(() {
+            _isConnecting = true;
+          });
+        }
+      } else if (state == AgentState.listening) {
+        // Agent is ready and listening - connection complete or speaking finished
+        if (mounted) {
+          setState(() {
+            _isConnecting = false;
+            _isGenerating = false; // Reset pondering state
+            _isAudioPlaying = false;
+            _showUserMessageBubble = false; // Hide user message when agent is done speaking
+            _lastUserMessage = null; // Clear the message
+          });
+          // Clear input box (voice transcription or pending text)
+          _textController.clear();
+          print('✅ Agent ready - cleared user message bubble and input box');
+        }
+        
+        // Note: END marker is automatically sent by the backend agent
+        print('🛑 LiveKit audio stream ended');
+      } else if (state == AgentState.thinking) {
+        // User finished speaking - agent is processing (pondering state)
+        if (mounted) {
+          setState(() {
+            _isConnecting = false;
+            _isGenerating = true; // Enter pondering/loading state
+            _isAudioPlaying = false;
+          });
+          print('🤔 Agent is thinking - showing pondering state');
+        }
+        
+        // Start timeout for stuck pondering state
+        _generatingTimeout?.cancel();
+        _generatingTimeout = Timer(_generatingTimeoutDuration, () {
+          if (mounted && _isGenerating) {
+            print('⏰ Pondering timeout! Resetting state');
+            setState(() {
+              _isGenerating = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Response timeout - please try again'),
+                backgroundColor: Colors.orange.shade700,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        });
+      } else if (state == AgentState.speaking) {
+        // Exit "pondering" state and enter "narrating" state
+        _generatingTimeout?.cancel(); // Cancel timeout - we got a response!
+        if (mounted) {
+          setState(() {
+            _isConnecting = false;
             _isGenerating = false; // Exit pondering/loading state
             _isAudioPlaying = true; // Enter narrating/speaking state
           });
-          print('🎙️ Agent started speaking - switched from pondering to narrating');
+          print('🎙️ Agent started speaking - switched to narrating state');
         }
         
         // Note: PCM audio chunks are now sent directly from the backend agent
         // via data channel and automatically forwarded to Unity by LiveKitService
         print('🎵 LiveKit audio will be streamed from backend to Unity for lip-sync');
-      } else if (state == AgentState.listening) {
-        // Agent finished speaking - clean up
+      } else if (state == AgentState.disconnected) {
+        // Disconnected from LiveKit - only show connecting if user is still authenticated
         if (mounted) {
+          final isAuthenticated = supabase.Supabase.instance.client.auth.currentUser != null;
           setState(() {
-            _isAudioPlaying = false;
-            _liveKitSubtitle = null; // Clear subtitle when done
+            _isConnecting = isAuthenticated; // Only show connecting if logged in
           });
-          print('✅ Agent finished speaking - cleared narrating state');
         }
-        
-        // Note: END marker is automatically sent by the backend agent
-        print('🛑 LiveKit audio stream ended');
       }
     });
     
-    // Listen to LiveKit transcriptions for subtitles
-    _liveKitService.onTranscriptionReceived.listen((text) {
-      if (mounted && text.isNotEmpty) {
+    // Listen to user transcription (voice input) - show in input box
+    _liveKitService.onUserTranscription.listen((transcription) {
+      if (mounted && _isRecording) {
+        // Show user's speech in the input box as they speak
         setState(() {
-          _liveKitSubtitle = text;
+          _textController.text = transcription;
+          // Move cursor to end
+          _textController.selection = TextSelection.fromPosition(
+            TextPosition(offset: transcription.length),
+          );
         });
-        
-        // Send text to Unity for lip sync (viseme generation from text)
-        sendToUnity("Flutter", "OnLipSyncText", text);
+      }
+    });
+    
+    // Listen to LiveKit errors
+    _liveKitService.onError.listen((error) {
+      if (mounted) {
+        ToastUtils.showError(context, error);
+      }
+    });
+    
+    // Listen to errors from LiveKit service
+    _liveKitService.onError.listen((error) {
+      if (mounted) {
+        print('❌ LiveKit Error: $error');
+        // Show a snackbar or toast with the error
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        // Reset generating state on error
+        setState(() {
+          _isGenerating = false;
+          _isConnecting = false;
+        });
       }
     });
     
@@ -303,6 +381,10 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         final user = supabase.Supabase.instance.client.auth.currentUser;
         final authToken = supabase.Supabase.instance.client.auth.currentSession?.accessToken;
         if (user != null && authToken != null) {
+          // Set connecting state BEFORE starting connection
+          setState(() {
+            _isConnecting = true;
+          });
           _liveKitService.connect(threadId, user.id, authToken: authToken);
         }
 
@@ -529,7 +611,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
               // Load last conversation
               _loadLastThread();
             } else if (state is AuthUnauthenticated) {
-              // User signed out - clear all chat data
+              // User signed out - disconnect LiveKit and clear all chat data
+              _liveKitService.disconnect();
               context.read<ChatBloc>().add(const ChatMessagesCleared());
               
               // Reset local state
@@ -538,8 +621,8 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                 _showFollowUps = false;
                 _previousFollowUps = [];
                 _isGenerating = false;
+                _isConnecting = false; // Not connecting when logged out
                 _showUserMessageBubble = false;
-                _currentAlignment = null;
                 _isAudioPlaying = false;
                 _currentlyPlayingMessageId = null;
               });
@@ -663,7 +746,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                       if (mounted) {
                         setState(() {
                           _isAudioPlaying = false;
-                          _currentAlignment = null; // Clear alignment data too
+ // Clear alignment data too
                           _isGenerating = false; // Reset generating state after audio finishes
                         });
                         print('🔇 Subtitles hidden after ${audioDuration.toStringAsFixed(2)}s');
@@ -815,65 +898,6 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                         ),
                       ),
                     
-                    // Real-time subtitles - shows during audio playback
-                    // ElevenLabs alignment-based subtitles (for non-LiveKit audio)
-                    if (_isAudioPlaying && _currentAlignment != null)
-                      SubtitleWidget(
-                        alignment: _currentAlignment,
-                        isPlaying: _isAudioPlaying,
-                      ),
-                    
-                    // LiveKit transcription subtitles (glass effect, same design)
-                    if (_isAudioPlaying && _liveKitSubtitle != null && _liveKitSubtitle!.isNotEmpty && _currentAlignment == null)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: MediaQuery.of(context).size.height * 0.25,
-                        child: IgnorePointer(
-                          child: Center(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                                child: Container(
-                                  constraints: BoxConstraints(
-                                    maxWidth: MediaQuery.of(context).size.width * 0.8,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Colors.white.withOpacity(0.08),
-                                        Colors.white.withOpacity(0.05),
-                                      ],
-                                    ),
-                                  ),
-                                  child: Text(
-                                    _liveKitSubtitle!,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontFamily: 'Alegreya',
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.3,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black45,
-                                          offset: Offset(0, 1),
-                                          blurRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -1180,6 +1204,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
                     BottomInputBar(
                       textController: _textController,
                       focusNode: _textFocusNode,
+                      isConnecting: _isConnecting,
                       isGenerating: _isGenerating,
                       isRecording: _isRecording,
                       isAudioPlaying: _isAudioPlaying,
@@ -1318,6 +1343,24 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
       _showFollowUps = false; // Hide follow-ups when sending message
     });
     
+    // Start timeout for stuck pondering state
+    _generatingTimeout?.cancel();
+    _generatingTimeout = Timer(_generatingTimeoutDuration, () {
+      if (mounted && _isGenerating) {
+        print('⏰ Pondering timeout! Resetting state');
+        setState(() {
+          _isGenerating = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Response timeout - please try again'),
+            backgroundColor: Colors.orange.shade700,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
+    
     // IMPORTANT: Unfocus text field after sending message to prevent keyboard from reopening
     // The keyboard will only open when user explicitly taps the input field
     if (_textFocusNode.hasFocus) {
@@ -1440,8 +1483,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
         }
       }
     } else {
-      // Start recording with internal audio only (no microphone needed!)
-      _screenRecordingService.setAudioCaptureMode(internalOnly: true);
+      // Start recording with microphone audio
       bool started = await _screenRecordingService.startRecording();
       
       if (started) {
@@ -1491,6 +1533,7 @@ class _MainScreenState extends State<_MainScreen> with SingleTickerProviderState
     _animationController.dispose();
     _chipAutoHideTimer?.cancel();
     _recordingAutoStopTimer?.cancel(); // Cancel recording auto-stop timer
+    _generatingTimeout?.cancel(); // Cancel pondering timeout
     _removeRecordingIndicator();
     super.dispose();
   }

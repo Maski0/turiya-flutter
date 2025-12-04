@@ -8,6 +8,7 @@ class BottomInputBar extends StatefulWidget {
   final bool isGenerating;
   final bool isRecording;
   final bool isAudioPlaying;
+  final bool isConnecting; // LiveKit is connecting, disable input
   final Function(String) onSubmit;
   final VoidCallback onMicTap;
   final VoidCallback? onMicLongPress;
@@ -19,6 +20,7 @@ class BottomInputBar extends StatefulWidget {
     required this.isGenerating,
     this.isRecording = false,
     this.isAudioPlaying = false,
+    this.isConnecting = false,
     required this.onSubmit,
     required this.onMicTap,
     this.onMicLongPress,
@@ -34,11 +36,20 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
   late AnimationController _textFadeController;
   late Animation<double> _textFadeAnimation;
   
-  String _previousHintText = 'Ask what your heart seeks';
+  late String _previousHintText;
+
+  String _getHintText() {
+    if (widget.isConnecting) return 'Connecting...';
+    if (widget.isGenerating) return 'Pondering...';
+    if (widget.isAudioPlaying) return 'Narrating...';
+    return 'Ask what your heart seeks';
+  }
 
   @override
   void initState() {
     super.initState();
+    _previousHintText = _getHintText();
+    
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000), // 2s pulse cycle
@@ -64,18 +75,9 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
   void didUpdateWidget(BottomInputBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Detect hint text changes and animate
-    final oldHint = oldWidget.isGenerating 
-        ? 'Pondering...' 
-        : oldWidget.isAudioPlaying 
-            ? 'Narrating...' 
-            : 'Ask what your heart seeks';
-    final newHint = widget.isGenerating 
-        ? 'Pondering...' 
-        : widget.isAudioPlaying 
-            ? 'Narrating...' 
-            : 'Ask what your heart seeks';
+    final newHint = _getHintText();
     
-    if (oldHint != newHint) {
+    if (_previousHintText != newHint) {
       // Fade out, change text, fade in
       _textFadeController.reverse().then((_) {
         if (mounted) {
@@ -97,7 +99,8 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    final bool isActive = widget.isGenerating || widget.isAudioPlaying;
+    final bool isActive = widget.isConnecting || widget.isGenerating || widget.isAudioPlaying;
+    final bool isDisabled = widget.isConnecting || widget.isGenerating || widget.isAudioPlaying;
     
     return AnimatedBuilder(
       animation: _glowAnimation,
@@ -131,9 +134,10 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
                       return TextField(
                         controller: widget.textController,
                         focusNode: widget.focusNode,
-                        readOnly: widget.isGenerating || widget.isAudioPlaying,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        readOnly: isDisabled,
+                        enabled: !widget.isConnecting,
+                        style: TextStyle(
+                          color: widget.isConnecting ? Colors.white38 : Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -143,24 +147,24 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
                             color: Colors.white54.withOpacity(_textFadeAnimation.value * 0.54),
                             fontSize: 16,
                             fontWeight: FontWeight.w300,
-                            fontStyle: (widget.isGenerating || widget.isAudioPlaying) ? FontStyle.italic : FontStyle.normal,
+                            fontStyle: isDisabled ? FontStyle.italic : FontStyle.normal,
                           ),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
                           isDense: true,
                         ),
-                        onSubmitted: widget.onSubmit,
+                        onSubmitted: isDisabled ? null : widget.onSubmit,
                       );
                     },
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Mic button (with recording indicator) - hidden when generating or narrating
+                // Mic button (with recording indicator) - hidden when generating, narrating, or connecting
                 // Keep the space even when hidden to maintain consistent height
                 SizedBox(
-                  width: (!widget.isGenerating && !widget.isAudioPlaying) ? 32 : 0,
+                  width: (!isDisabled) ? 32 : 0,
                   height: 32,
-                  child: (!widget.isGenerating && !widget.isAudioPlaying)
+                  child: (!isDisabled)
                     ? GestureDetector(
                         onTap: widget.onMicTap,
                         onLongPress: widget.onMicLongPress,
@@ -193,10 +197,10 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
                       )
                     : null,
                 ),
-                SizedBox(width: (!widget.isGenerating && !widget.isAudioPlaying) ? 12 : 0),
-                // Send button (arrow) - disabled when recording
+                SizedBox(width: (!isDisabled) ? 12 : 0),
+                // Send button (arrow) - disabled when recording, connecting, generating, or narrating
                 GestureDetector(
-                  onTap: (widget.isGenerating || widget.isRecording || widget.isAudioPlaying) 
+                  onTap: (isDisabled || widget.isRecording) 
                       ? null 
                       : () => widget.onSubmit(widget.textController.text),
                   child: Padding(
@@ -204,7 +208,7 @@ class _BottomInputBarState extends State<BottomInputBar> with TickerProviderStat
                     child: SizedBox(
                       width: 24,
                       height: 24,
-                      child: (widget.isGenerating || widget.isAudioPlaying)
+                      child: (widget.isConnecting || widget.isGenerating || widget.isAudioPlaying)
                         ? Center(
                             child: AnimatedDots(
                               size: 4.0,

@@ -25,10 +25,8 @@ class InterludeScreen extends StatelessWidget {
       displayText = text.replaceAll('{userName}', data!.userName!);
     }
     
-    return OnboardingScaffold(
-      progress: progress,
-      showBackButton: true,
-      child: Column(
+    // Return content only - wrapper handles scaffold
+    return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Turiya Morpankh logo
@@ -51,7 +49,6 @@ class InterludeScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
     );
   }
 }

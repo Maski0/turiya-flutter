@@ -47,54 +47,62 @@ class _MotivationScreenState extends State<MotivationScreen> {
   
   @override
   Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      progress: 0.25, // 2/8
-      showBackButton: true,
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
-            child: Text(
-              'Every journey begins with a question, what brings you here?',
-              style: OnboardingTheme.headingMedium,
-              textAlign: TextAlign.start,
-            ),
+    const double buttonHeightWithPadding = 80; // 64 + 8 + 8
+    
+    return Stack(
+      children: [
+        // Scrollable content with bottom padding
+        ListView.builder(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 0,
+            bottom: buttonHeightWithPadding + 16, // Extra space for last item visibility
           ),
-          // Options
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: options.length,
-              itemBuilder: (context, index) {
-                final option = options[index];
-                final isSelected = selected.contains(option);
-                return OnboardingRadioOption(
-                  label: option,
-                  isSelected: isSelected,
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        selected.remove(option);
-                      } else {
-                        selected.add(option);
-                      }
-                    });
-                  },
-                );
+          itemCount: options.length + 1, // +1 for header
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              // Header
+              return Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, top: 16, bottom: 16),
+                child: Text(
+                  'Every journey begins with a question, what brings you here?',
+                  style: OnboardingTheme.headingMedium,
+                  textAlign: TextAlign.start,
+                ),
+              );
+            }
+            
+            final optionIndex = index - 1;
+            final option = options[optionIndex];
+            final isSelected = selected.contains(option);
+            return OnboardingRadioOption(
+              label: option,
+              isSelected: isSelected,
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    selected.remove(option);
+                  } else {
+                    selected.add(option);
+                  }
+                });
               },
-            ),
+            );
+          },
+        ),
+        
+        // Fixed button at bottom
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: OnboardingButton(
+            text: 'Continue',
+            onPressed: selected.isNotEmpty ? _handleSubmit : null,
           ),
-          // Continue button
-          Padding(
-            padding: const EdgeInsets.only(bottom: 0),
-            child: OnboardingButton(
-              text: 'Continue',
-              onPressed: selected.isNotEmpty ? _handleSubmit : null,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

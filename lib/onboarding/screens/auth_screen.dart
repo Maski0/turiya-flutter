@@ -31,15 +31,13 @@ class AuthScreen extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      progress: 0.875,
-      showBackButton: true,
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
+    // Return content only - wrapper handles scaffold
+    return Column(
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Text(
               'Save your progress, make Krishna remember you',
               style: OnboardingTheme.headingMedium,
               textAlign: TextAlign.start,
@@ -61,52 +59,51 @@ class AuthScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                // Google Sign In
+                // Google Sign In - White background
                 GestureDetector(
                   onTap: _handleGoogleSignIn,
                   child: Container(
                     height: 64,
                     decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      border: Border.all(
-                        color: OnboardingTheme.textPrimary.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Google icon placeholder
+                        // Google "G" logo (using text for now, proper icon should be asset)
                         Container(
                           width: 18,
                           height: 18,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
+                          child: Image.network(
+                            'https://www.google.com/favicon.ico',
+                            width: 18,
+                            height: 18,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Text('G', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold));
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Sign in with Google',
-                          style: OnboardingTheme.buttonText.copyWith(fontSize: 16),
+                          style: OnboardingTheme.buttonText.copyWith(
+                            fontSize: 16,
+                            color: Colors.black,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Apple Sign In
+                // Apple Sign In - Black background, white icon/text
                 GestureDetector(
                   onTap: _handleAppleSignIn,
                   child: Container(
                     height: 64,
                     decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      border: Border.all(
-                        color: OnboardingTheme.textPrimary.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: Colors.black,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
@@ -115,30 +112,40 @@ class AuthScreen extends StatelessWidget {
                         // Apple icon
                         const Icon(
                           Icons.apple,
-                          color: OnboardingTheme.textPrimary,
+                          color: Colors.white,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Sign in with Apple',
-                          style: OnboardingTheme.buttonText.copyWith(fontSize: 16),
+                          style: OnboardingTheme.buttonText.copyWith(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Skip option
+                // Skip option - Only "Skip for later" is underlined
                 GestureDetector(
                   onTap: onSkip,
-                  child: Text(
-                    'Don\'t want to do this now? Skip for later',
-                    style: OnboardingTheme.bodyMedium.copyWith(
-                      fontSize: 14,
-                      color: OnboardingTheme.textPrimary.withOpacity(0.6),
-                      decoration: TextDecoration.underline,
-                    ),
+                  child: RichText(
                     textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: OnboardingTheme.bodyMedium.copyWith(
+                        fontSize: 14,
+                        color: OnboardingTheme.textPrimary.withOpacity(0.6),
+                      ),
+                      children: const [
+                        TextSpan(text: 'Don\'t want to do this now? '),
+                        TextSpan(
+                          text: 'Skip for later',
+                          style: TextStyle(decoration: TextDecoration.underline),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -146,7 +153,6 @@ class AuthScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'models/onboarding_data.dart';
+import 'widgets/onboarding_page_view.dart';
 import 'screens/animated_splash_screen.dart';
 import 'screens/name_input_screen.dart';
 import 'screens/greeting_screen.dart';
@@ -117,16 +118,16 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         );
       
       case 9:
-        // Daily practice selection (Screen 20)
-        return DailyPracticeScreen(data: data, onNext: _nextStep);
-      
-      case 10:
         // Stats screen "Your Inner Stillness" (Frame 411)
         return StatsScreen(onNext: _nextStep);
       
-      case 11:
+      case 10:
         // Daily blessings (Screen 19)
         return DailyBlessingsScreen(data: data, onNext: _nextStep);
+      
+      case 11:
+        // Daily practice selection (Screen 20)
+        return DailyPracticeScreen(data: data, onNext: _nextStep);
       
       case 12:
         // Auth (Screen 21)
@@ -153,28 +154,39 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     }
   }
   
+  double _getProgress() {
+    // Calculate progress based on current step
+    // Total steps: 14 (0-13), but step 0 is splash screen
+    if (currentStep == 0) return 0.0; // Splash
+    return (currentStep / 13).clamp(0.0, 1.0);
+  }
+  
+  bool _shouldShowBackButton() {
+    // Don't show back button on splash, auto-advancing interlude screens, or completion
+    return currentStep > 0 && currentStep != 2 && currentStep != 4 && currentStep != 6 && currentStep != 8 && currentStep != 13;
+  }
+  
   @override
   Widget build(BuildContext context) {
+    // Special case: Splash screen doesn't use the page view wrapper
+    if (currentStep == 0) {
+      return _getCurrentScreen();
+    }
+    
     return WillPopScope(
       onWillPop: () async {
-        if (currentStep > 0) {
+        if (currentStep > 0 && _shouldShowBackButton()) {
           _previousStep();
           return false;
         }
         return true;
       },
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 500),
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: child,
-          );
-        },
-        child: Container(
-          key: ValueKey<int>(currentStep),
-          child: _getCurrentScreen(),
-        ),
+      child: OnboardingPageView(
+        progress: _getProgress(),
+        showBackButton: _shouldShowBackButton(),
+        onBack: _previousStep,
+        childKey: ValueKey(currentStep),
+        child: _getCurrentScreen(),
       ),
     );
   }

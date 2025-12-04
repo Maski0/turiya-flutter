@@ -15,10 +15,8 @@ class StatsScreen extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      progress: 0.75,
-      showBackButton: true,
-      child: Column(
+    // Return content only - wrapper handles scaffold
+    return Column(
         children: [
           const SizedBox(height: 40),
           // Title
@@ -74,7 +72,6 @@ class StatsScreen extends StatelessWidget {
             onPressed: onNext,
           ),
         ],
-      ),
     );
   }
 }

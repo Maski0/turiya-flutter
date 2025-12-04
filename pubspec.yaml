@@ -20,6 +20,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
   supabase_flutter: ^2.8.0
   flutter_secure_storage: ^9.0.0
+  url_launcher: ^6.3.1
   
   # Local Database - Isar
   isar: ^3.1.0+1
@@ -48,6 +49,7 @@ dependencies:
   record: ^6.1.2
   shared_preferences: ^2.5.3
   flutter_svg: ^2.2.2
+  liquid_glass_renderer: ^0.2.0-dev.4
 
 
 dev_dependencies:

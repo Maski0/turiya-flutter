@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/onboarding_theme.dart';
-import '../widgets/onboarding_scaffold.dart';
 import '../widgets/onboarding_button.dart';
 
 /// Screen 22-24: Completion and plan ready
@@ -17,14 +16,27 @@ class CompletionScreen extends StatefulWidget {
   State<CompletionScreen> createState() => _CompletionScreenState();
 }
 
-class _CompletionScreenState extends State<CompletionScreen> {
+class _CompletionScreenState extends State<CompletionScreen> with SingleTickerProviderStateMixin {
   bool isLoading = true;
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
   
   @override
   void initState() {
     super.initState();
-    // Simulate plan creation
-    Future.delayed(const Duration(seconds: 3), () {
+    
+    // Deterministic progress animation (0% to 100% over 3 seconds)
+    _progressController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    );
+    
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+    );
+    
+    // Start animation
+    _progressController.forward().then((_) {
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -34,12 +46,17 @@ class _CompletionScreenState extends State<CompletionScreen> {
   }
   
   @override
+  void dispose() {
+    _progressController.dispose();
+    super.dispose();
+  }
+  
+  @override
   Widget build(BuildContext context) {
+    // Return content only - wrapper handles scaffold
     if (isLoading) {
       // Loading state (Screen 22-23)
-      return OnboardingScaffold(
-        progress: 1.0,
-        child: Column(
+      return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Logo
@@ -68,77 +85,92 @@ class _CompletionScreenState extends State<CompletionScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 40),
-            // Loading bar
+            // Deterministic loading bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(2),
-                child: const LinearProgressIndicator(
-                  backgroundColor: OnboardingTheme.progressBar,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    OnboardingTheme.progressBarFill,
-                  ),
+                child: AnimatedBuilder(
+                  animation: _progressAnimation,
+                  builder: (context, child) {
+                    return LinearProgressIndicator(
+                      value: _progressAnimation.value, // Deterministic progress
+                      backgroundColor: OnboardingTheme.progressBar,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        OnboardingTheme.progressBarFill,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
           ],
-        ),
       );
     }
 
     // Plan ready state (Screen 24)
-    return OnboardingScaffold(
-      progress: 1.0,
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          // Logo
-          SizedBox(
-            width: 123,
-            height: 156.3,
-            child: SvgPicture.asset(
-              'assets/images/onboarding/logo.svg',
-              fit: BoxFit.contain,
-            ),
+    const double buttonHeightWithPadding = 80; // 64 + 8 + 8
+    
+    return Stack(
+      children: [
+        // Scrollable content with bottom padding
+        SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 24,
+            bottom: buttonHeightWithPadding + 16, // Extra space for visibility
           ),
-          const SizedBox(height: 24),
-          // Header text
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              children: [
-                Text(
-                  'Your custom plan is ready',
-                  style: OnboardingTheme.displayXL.copyWith(fontSize: 28),
-                  textAlign: TextAlign.center,
+          child: Column(
+            children: [
+              // Logo
+              SizedBox(
+                width: 123,
+                height: 156.3,
+                child: SvgPicture.asset(
+                  'assets/images/onboarding/logo.svg',
+                  fit: BoxFit.contain,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'A sacred rhythm designed to bring peace to your mind and stillness to your heart.',
-                  style: OnboardingTheme.bodyMedium.copyWith(
-                    fontSize: 13,
-                    color: OnboardingTheme.textPrimary.withOpacity(0.75),
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              // Header text
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Your custom plan is ready',
+                      style: OnboardingTheme.displayXL.copyWith(fontSize: 28),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'A sacred rhythm designed to bring peace to your mind and stillness to your heart.',
+                      style: OnboardingTheme.bodyMedium.copyWith(
+                        fontSize: 13,
+                        color: OnboardingTheme.textPrimary.withOpacity(0.75),
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          // Daily ritual section
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                padding: const EdgeInsets.all(20),
+              ),
+              const SizedBox(height: 32),
+              // Daily ritual section
+              Container(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 24, bottom: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.03),
-                  border: Border.all(
-                    color: OnboardingTheme.textPrimary.withOpacity(0.15),
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0x40000000), // 25% black to match Figma
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0x14111111), // rgba(17,17,17,0.08)
+                      offset: const Offset(0, 4),
+                      blurRadius: 16,
+                      spreadRadius: 0,
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,15 +228,21 @@ class _CompletionScreenState extends State<CompletionScreen> {
                   ],
                 ),
               ),
-            ),
+            ],
           ),
-          // Button
-          OnboardingButton(
+        ),
+        
+        // Fixed button at bottom
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: OnboardingButton(
             text: 'Talk to Krishna',
             onPressed: widget.onComplete,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -215,14 +253,18 @@ class _CompletionScreenState extends State<CompletionScreen> {
     bool showCheckbox = false,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
-        border: Border.all(
-          color: OnboardingTheme.textPrimary.withOpacity(0.1),
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.transparent, // Transparent to match Figma
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x14111111), // rgba(17,17,17,0.08)
+            offset: const Offset(0, 4),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -245,12 +287,12 @@ class _CompletionScreenState extends State<CompletionScreen> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8), // 8px gap to match Figma
                 Text(
                   duration,
                   style: OnboardingTheme.bodyMedium.copyWith(
                     fontSize: 12,
-                    color: OnboardingTheme.textPrimary.withOpacity(0.6),
+                    color: OnboardingTheme.textPrimary.withOpacity(0.48), // 48% opacity to match Figma
                   ),
                 ),
               ],
