@@ -401,6 +401,30 @@ class LiveKitService {
           _updateState(AgentState.listening);
         }
       })
+      ..on<ParticipantAttributesChanged>((event) {
+        // Handle agent state changes broadcast via lk.agent.state attribute
+        // This is the primary way LiveKit agents communicate their state
+        if (event.participant.identity.startsWith('agent-')) {
+          final agentState = event.attributes['lk.agent.state'];
+          print('🤖 Agent attribute changed: lk.agent.state = $agentState');
+          
+          if (agentState != null) {
+            switch (agentState) {
+              case 'thinking':
+                _updateState(AgentState.thinking);
+                break;
+              case 'speaking':
+                _updateState(AgentState.speaking);
+                break;
+              case 'listening':
+                _updateState(AgentState.listening);
+                break;
+              default:
+                print('⚠️ Unknown agent state: $agentState');
+            }
+          }
+        }
+      })
       ..on<TrackPublishedEvent>((event) async {
         print('📢 TrackPublishedEvent - Kind: ${event.publication.kind}, Sid: ${event.publication.sid}');
         print('   Participant: ${event.participant.identity}');

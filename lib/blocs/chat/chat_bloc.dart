@@ -11,6 +11,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final BackendApiService _backendApi;
   final CacheService _cacheService;
   final LiveKitService _liveKitService;
+  
+  // Expose LiveKitService for external access (e.g., connecting after auth)
+  LiveKitService get liveKitService => _liveKitService;
 
   ChatBloc({
     BackendApiService? backendApi,
