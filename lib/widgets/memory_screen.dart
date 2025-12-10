@@ -108,7 +108,7 @@ class MemoryScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Your conversations with Krishna will be remembered here',
+                        'Your conversations with Sai Baba will be remembered here',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.5),

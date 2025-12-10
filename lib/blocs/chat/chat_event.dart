@@ -8,7 +8,7 @@ abstract class ChatEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Send a message to Krishna
+/// Send a message to Sai Baba
 class ChatMessageSent extends ChatEvent {
   final String message;
   final String? threadId;

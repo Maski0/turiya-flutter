@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 import '../blocs/credits/credits_bloc.dart';
@@ -20,7 +21,6 @@ class MenuDrawer extends StatefulWidget {
 }
 
 class _MenuDrawerState extends State<MenuDrawer> {
-
   @override
   Widget build(BuildContext context) {
     final menuOptions = [
@@ -69,9 +69,18 @@ class _MenuDrawerState extends State<MenuDrawer> {
     ];
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
       child: Container(
-        color: Colors.black.withOpacity(0.3), // Dark overlay for better visibility
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0.32),
+              Colors.black.withOpacity(0.25),
+            ],
+          ),
+        ),
         child: Stack(
           children: [
             // Menu options centered
@@ -79,7 +88,7 @@ class _MenuDrawerState extends State<MenuDrawer> {
               bottom: false,
               child: Center(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 42),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -88,45 +97,50 @@ class _MenuDrawerState extends State<MenuDrawer> {
                         builder: (context, authState) {
                           if (authState is AuthAuthenticated) {
                             final user = authState.user;
-                            final name = user.userMetadata?['full_name'] as String? ??
-                                user.userMetadata?['name'] as String? ??
-                                'User';
+                            final name =
+                                user.userMetadata?['full_name'] as String? ??
+                                    user.userMetadata?['name'] as String? ??
+                                    'User';
                             final email = user.email ?? '';
-                            
+
                             return Column(
                               children: [
                                 Text(
                                   name,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
                                 Text(
                                   email,
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withOpacity(0.58),
                                     fontSize: 14,
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 18),
                                 // Credits info
                                 BlocBuilder<CreditsBloc, CreditsState>(
                                   builder: (context, creditsState) {
                                     if (creditsState is CreditsLoaded) {
                                       return Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 12,
+                                          horizontal: 22,
+                                          vertical: 14,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(12),
+                                          color: Colors.white.withOpacity(0.09),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
                                           border: Border.all(
-                                            color: Colors.white.withOpacity(0.2),
-                                            width: 1,
+                                            color:
+                                                Colors.white.withOpacity(0.18),
+                                            width: 0.8,
                                           ),
                                         ),
                                         child: Row(
@@ -149,23 +163,29 @@ class _MenuDrawerState extends State<MenuDrawer> {
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
-                                                fontWeight: FontWeight.w500,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.2,
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
                                                 horizontal: 8,
                                                 vertical: 2,
                                               ),
                                               decoration: BoxDecoration(
                                                 color: creditsState.isPro
-                                                    ? Colors.amber.withOpacity(0.2)
-                                                    : Colors.blue.withOpacity(0.2),
-                                                borderRadius: BorderRadius.circular(8),
+                                                    ? Colors.amber
+                                                        .withOpacity(0.2)
+                                                    : Colors.blue
+                                                        .withOpacity(0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
                                               ),
                                               child: Text(
-                                                creditsState.planType.toUpperCase(),
+                                                creditsState.planType
+                                                    .toUpperCase(),
                                                 style: TextStyle(
                                                   color: creditsState.isPro
                                                       ? Colors.amber
@@ -182,15 +202,15 @@ class _MenuDrawerState extends State<MenuDrawer> {
                                     return const SizedBox.shrink();
                                   },
                                 ),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 26),
                                 // Divider
                                 Container(
-                                  height: 1,
+                                  height: 0.5,
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
                                         Colors.white.withOpacity(0),
-                                        Colors.white.withOpacity(0.5),
+                                        Colors.white.withOpacity(0.45),
                                         Colors.white.withOpacity(0),
                                       ],
                                     ),
@@ -207,28 +227,33 @@ class _MenuDrawerState extends State<MenuDrawer> {
                         final index = entry.key;
                         final option = entry.value;
                         final isLast = index == menuOptions.length - 1;
-                        
+
                         return Column(
                           children: [
                             InkWell(
                               onTap: option.onTap,
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 18),
                                 child: Row(
                                   children: [
                                     Icon(
                                       option.icon,
-                                      color: option.iconColor ?? option.textColor ?? Colors.white.withOpacity(0.9),
-                                      size: 24,
+                                      color: option.iconColor ??
+                                          option.textColor ??
+                                          Colors.white.withOpacity(0.92),
+                                      size: 23,
                                     ),
-                                    const SizedBox(width: 16),
+                                    const SizedBox(width: 18),
                                     Expanded(
                                       child: Text(
                                         option.title,
                                         style: TextStyle(
-                                          color: option.textColor ?? Colors.white,
+                                          color:
+                                              option.textColor ?? Colors.white,
                                           fontSize: 17,
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.2,
                                         ),
                                       ),
                                     ),
@@ -239,12 +264,12 @@ class _MenuDrawerState extends State<MenuDrawer> {
                             // Gradient divider
                             if (!isLast)
                               Container(
-                                height: 1,
+                                height: 0.5,
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
                                       Colors.white.withOpacity(0),
-                                      Colors.white.withOpacity(0.5),
+                                      Colors.white.withOpacity(0.40),
                                       Colors.white.withOpacity(0),
                                     ],
                                   ),
@@ -267,18 +292,19 @@ class _MenuDrawerState extends State<MenuDrawer> {
                 child: GestureDetector(
                   onTap: widget.onClose,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 10),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.white.withOpacity(0.2),
-                          Colors.white.withOpacity(0.1),
+                          Colors.white.withOpacity(0.18),
+                          Colors.white.withOpacity(0.10),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1,
+                        color: Colors.white.withOpacity(0.28),
+                        width: 0.8,
                       ),
                     ),
                     child: Row(
@@ -286,16 +312,17 @@ class _MenuDrawerState extends State<MenuDrawer> {
                       children: [
                         Icon(
                           Icons.keyboard_arrow_down,
-                          color: Colors.white.withOpacity(0.8),
-                          size: 20,
+                          color: Colors.white.withOpacity(0.85),
+                          size: 19,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 7),
                         Text(
                           'Close Menu',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withOpacity(0.92),
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ],
@@ -326,4 +353,3 @@ class _MenuOption {
     this.iconColor,
   });
 }
-

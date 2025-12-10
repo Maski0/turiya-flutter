@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'animated_dots.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 class LoginModal extends StatelessWidget {
   final VoidCallback onClose;
@@ -19,9 +20,18 @@ class LoginModal extends StatelessWidget {
     return GestureDetector(
       onTap: onClose,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-          color: Colors.black.withOpacity(0.1), // Dark overlay for better blur visibility
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withOpacity(0.12),
+                Colors.black.withOpacity(0.18),
+              ],
+            ),
+          ),
           child: Center(
             child: GestureDetector(
               onTap: () {}, // Prevent closing when tapping the modal content
@@ -48,15 +58,15 @@ class LoginModal extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(28),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(28, 36, 28, 32),
+                        padding: const EdgeInsets.fromLTRB(30, 40, 30, 34),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withOpacity(0.11),
                           borderRadius: BorderRadius.circular(28),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.18),
-                            width: 0.5,
+                            color: Colors.white.withOpacity(0.20),
+                            width: 0.6,
                           ),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
@@ -90,25 +100,29 @@ class LoginModal extends StatelessWidget {
                             ),
                             const SizedBox(height: 20),
                             // Subtitle
-                            const Text(
+                            Text(
                               'Please login to continue.',
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
+                                color: Colors.white.withOpacity(0.92),
+                                fontSize: 16,
                                 fontWeight: FontWeight.w400,
-                                letterSpacing: 0.2,
+                                letterSpacing: 0.3,
+                                height: 1.4,
                               ),
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 30),
                             // Google Sign In Button
                             GestureDetector(
                               onTap: isSigningIn ? null : onGoogleSignIn,
                               child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 16, horizontal: 22),
                                 decoration: BoxDecoration(
-                                  color: isSigningIn ? Colors.white.withOpacity(0.7) : Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
+                                  color: isSigningIn
+                                      ? Colors.white.withOpacity(0.75)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.08),
@@ -141,7 +155,8 @@ class LoginModal extends StatelessWidget {
                                         ),
                                         child: Image.network(
                                           'https://www.google.com/favicon.ico',
-                                          errorBuilder: (context, error, stackTrace) {
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
                                             return Container(
                                               decoration: BoxDecoration(
                                                 color: Colors.blue,
@@ -161,13 +176,16 @@ class LoginModal extends StatelessWidget {
                                           },
                                         ),
                                       ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 14),
                                     Text(
-                                      isSigningIn ? 'Signing in...' : 'Sign in with Google',
+                                      isSigningIn
+                                          ? 'Signing in...'
+                                          : 'Sign in with Google',
                                       style: const TextStyle(
                                         color: Colors.black87,
                                         fontSize: 16,
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.2,
                                       ),
                                     ),
                                   ],
@@ -188,4 +206,3 @@ class LoginModal extends StatelessWidget {
     );
   }
 }
-

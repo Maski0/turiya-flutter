@@ -78,7 +78,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       // Parse response
       final aiContent = response['content'];
       final aiData = jsonDecode(aiContent);
-      final krishnaResponse = aiData['response'];
+      final saiBabaResponse = aiData['response'];
       final followUps = (aiData['follow_ups'] as List?)?.cast<String>() ?? [];
       
       // Debug logging
@@ -97,7 +97,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       // Add AI message with isPlayed=false so TTS plays it
       final aiMessage = ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: krishnaResponse,
+        content: saiBabaResponse,
         type: 'ai',
         speaker: 'Kṛṣṇa',
         isPlayed: false, // Mark as unplayed so TTS will play it

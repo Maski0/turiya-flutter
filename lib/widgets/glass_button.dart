@@ -18,7 +18,7 @@ class GlassButton extends StatelessWidget {
       child: CustomPaint(
         painter: _GradientBorderPainter(),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
           child: child,
         ),
       ),
@@ -31,37 +31,36 @@ class _GradientBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
-    
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(13));
+
     final gradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        Colors.white.withOpacity(0.6),
-        Colors.white.withOpacity(0.2),
-        Colors.white.withOpacity(0.2),
-        Colors.white.withOpacity(0.6),
+        Colors.white.withOpacity(0.55),
+        Colors.white.withOpacity(0.22),
+        Colors.white.withOpacity(0.22),
+        Colors.white.withOpacity(0.55),
       ],
-      stops: const [0.0, 0.3, 0.7, 1.0],
+      stops: const [0.0, 0.32, 0.68, 1.0],
     );
-    
+
     final paint = Paint()
       ..shader = gradient.createShader(rect)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-    
+      ..strokeWidth = 1.0;
+
     // Add subtle glow
     final glowPaint = Paint()
-      ..color = Colors.white.withOpacity(0.04)
+      ..color = Colors.white.withOpacity(0.05)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    
+      ..strokeWidth = 5
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+
     canvas.drawRRect(rrect, glowPaint);
     canvas.drawRRect(rrect, paint);
   }
-  
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
