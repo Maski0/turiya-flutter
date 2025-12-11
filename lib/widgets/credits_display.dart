@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/credits/credits_bloc.dart';
@@ -45,7 +46,7 @@ class CreditsDisplay extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    
+
                     // Credits count
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -53,20 +54,20 @@ class CreditsDisplay extends StatelessWidget {
                       children: [
                         Text(
                           state.isPro ? 'Unlimited' : '${state.totalCredits}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                         Text(
                           state.planType.toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                  ),
                         ),
                       ],
                     ),
@@ -76,10 +77,9 @@ class CreditsDisplay extends StatelessWidget {
             ),
           );
         }
-        
+
         return const SizedBox.shrink();
       },
     );
   }
 }
-

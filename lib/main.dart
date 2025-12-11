@@ -20,7 +20,6 @@ import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/menu_drawer.dart';
-import 'widgets/subtitle_widget.dart';
 import 'widgets/profile_avatar_widget.dart';
 import 'widgets/recording_indicator.dart';
 import 'widgets/recording_preview_overlay.dart';
@@ -32,7 +31,7 @@ import 'blocs/memory/memory_bloc.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import 'theme/app_theme.dart';
 
 // Global cache service
 late final CacheService cacheService;
@@ -77,10 +76,18 @@ class ExampleApp extends StatelessWidget {
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          fontFamily: 'Alegreya',
-          brightness: Brightness.dark,
-        ),
+        theme: AppTheme.darkTheme,
+        // Respect system text scaling for accessibility
+        builder: (context, child) {
+          return MediaQuery(
+            // Limit text scale factor to prevent breaking UI
+            data: MediaQuery.of(context).copyWith(
+              textScaleFactor:
+                  MediaQuery.of(context).textScaleFactor.clamp(0.8, 1.3),
+            ),
+            child: child!,
+          );
+        },
         home: const _MainScreen(),
       ),
     );
@@ -363,26 +370,26 @@ class _MainScreenState extends State<_MainScreen>
                                   ),
                                   const SizedBox(height: 22),
                                   // Title
-                                  const Text(
+                                  Text(
                                     'Exit App?',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.3,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium
+                                        ?.copyWith(
+                                          color: Colors.white,
+                                        ),
                                   ),
                                   const SizedBox(height: 14),
                                   // Message
                                   Text(
                                     'Are you sure you want to leave?',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.78),
-                                      fontSize: 16,
-                                      height: 1.5,
-                                      letterSpacing: 0.2,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(
+                                          color: Colors.white.withOpacity(0.78),
+                                        ),
                                   ),
                                   const SizedBox(height: 30),
                                   // Buttons
@@ -407,15 +414,10 @@ class _MainScreenState extends State<_MainScreen>
                                                 width: 0.6,
                                               ),
                                             ),
-                                            child: const Text(
+                                            child: Text(
                                               'Cancel',
                                               textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.2,
-                                              ),
+                                              style: AppTheme.title(context),
                                             ),
                                           ),
                                         ),
@@ -444,14 +446,12 @@ class _MainScreenState extends State<_MainScreen>
                                                 ),
                                               ],
                                             ),
-                                            child: const Text(
+                                            child: Text(
                                               'Exit',
                                               textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
+                                              style: AppTheme.title(context)
+                                                  .copyWith(
                                                 fontWeight: FontWeight.w700,
-                                                letterSpacing: 0.3,
                                               ),
                                             ),
                                           ),
@@ -806,15 +806,10 @@ class _MainScreenState extends State<_MainScreen>
           backgroundColor: Colors.black,
           resizeToAvoidBottomInset: false,
           body: GestureDetector(
-            onTap: () {
-              // Dismiss keyboard on tap outside (works for iOS and Android)
-              if (_textFocusNode.hasFocus) {
-                FocusScope.of(context).unfocus();
-                _textFocusNode.unfocus();
-                SystemChannels.textInput.invokeMethod('TextInput.hide');
-              }
+            onVerticalDragStart: (_) {
+              // Dismiss keyboard on vertical drag (swipe)
+              FocusScope.of(context).unfocus();
             },
-            behavior: HitTestBehavior.translucent,
             child: Stack(
               children: [
                 // Liquid glass background layer
@@ -860,13 +855,11 @@ class _MainScreenState extends State<_MainScreen>
                                 child: Text(
                                   _lastUserMessage!,
                                   textAlign: TextAlign.left,
-                                  style: TextStyle(
+                                  style: AppTheme.body(
+                                    context,
                                     color: Colors.white.withOpacity(0.92),
-                                    fontSize: 16,
                                     height: 1.5,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.2,
-                                  ),
+                                  ).copyWith(fontWeight: FontWeight.w500),
                                 ),
                               ),
                             ),
@@ -992,15 +985,14 @@ class _MainScreenState extends State<_MainScreen>
                                     onTap: _toggleLoginModal,
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(Icons.meeting_room,
+                                      children: [
+                                        const Icon(Icons.meeting_room,
                                             color: Colors.white, size: 20),
-                                        SizedBox(width: 8),
+                                        const SizedBox(width: 8),
                                         Text(
                                           'Login',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
+                                          style:
+                                              AppTheme.title(context).copyWith(
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -1100,6 +1092,7 @@ class _MainScreenState extends State<_MainScreen>
                   right: 0,
                   bottom: keyboardHeight,
                   child: SafeArea(
+                    bottom: true,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1136,9 +1129,13 @@ class _MainScreenState extends State<_MainScreen>
                                 duration: const Duration(milliseconds: 400),
                                 child: Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
-                                  child: SizedBox(
-                                    height: 36,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight:
+                                          44, // Max height constraint instead of fixed
+                                    ),
                                     child: ListView.builder(
+                                      shrinkWrap: true,
                                       scrollDirection: Axis.horizontal,
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 10),
@@ -1166,7 +1163,7 @@ class _MainScreenState extends State<_MainScreen>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                 horizontal: 16,
-                                                vertical: 10,
+                                                vertical: 8,
                                               ),
                                               decoration: BoxDecoration(
                                                 gradient: LinearGradient(
@@ -1185,14 +1182,18 @@ class _MainScreenState extends State<_MainScreen>
                                                   width: 0.8,
                                                 ),
                                               ),
-                                              child: Text(
-                                                question,
-                                                style: TextStyle(
-                                                  color: Colors.white
-                                                      .withOpacity(0.92),
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  letterSpacing: 0.2,
+                                              child: Center(
+                                                child: Text(
+                                                  question,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        color: Colors.white
+                                                            .withOpacity(0.92),
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                 ),
                                               ),
                                             ),
@@ -1256,10 +1257,10 @@ class _MainScreenState extends State<_MainScreen>
                       },
                     ),
                   ),
-              ],
-            ),
-          ), // Close GestureDetector
-        ),
+              ], // Close Stack children
+            ), // Close Stack
+          ), // Close GestureDetector (Scaffold body)
+        ), // Close Scaffold
       ), // Close PopScope
     );
   }
@@ -1439,10 +1440,7 @@ class _MainScreenState extends State<_MainScreen>
                       const SizedBox(height: 20),
                       Text(
                         processingMessage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
+                        style: AppTheme.body(context),
                         textAlign: TextAlign.center,
                       ),
                     ],

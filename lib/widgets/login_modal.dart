@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'animated_dots.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 class LoginModal extends StatelessWidget {
   final VoidCallback onClose;
@@ -87,14 +86,17 @@ class LoginModal extends StatelessWidget {
                               fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) {
                                 // Fallback to text if logo not found
-                                return const Text(
+                                return Text(
                                   'Turiya',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.w400,
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .displayLarge
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 48,
+                                        fontWeight: FontWeight.w400,
+                                        fontStyle: FontStyle.italic,
+                                      ),
                                 );
                               },
                             ),
@@ -102,13 +104,14 @@ class LoginModal extends StatelessWidget {
                             // Subtitle
                             Text(
                               'Please login to continue.',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.92),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 0.3,
-                                height: 1.4,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
+                                    color: Colors.white.withOpacity(0.92),
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.4,
+                                  ),
                             ),
                             const SizedBox(height: 30),
                             // Google Sign In Button
@@ -162,14 +165,17 @@ class LoginModal extends StatelessWidget {
                                                 color: Colors.blue,
                                                 shape: BoxShape.circle,
                                               ),
-                                              child: const Center(
+                                              child: Center(
                                                 child: Text(
                                                   'G',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
-                                                  ),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
                                                 ),
                                               ),
                                             );
@@ -181,12 +187,13 @@ class LoginModal extends StatelessWidget {
                                       isSigningIn
                                           ? 'Signing in...'
                                           : 'Sign in with Google',
-                                      style: const TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.2,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ],
                                 ),

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/memory/memory_bloc.dart';
@@ -14,13 +15,12 @@ class MemoryScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'My Memories',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -66,15 +66,16 @@ class MemoryScreen extends StatelessWidget {
                     Text(
                       'Error: ${state.message}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Colors.white,
+                          ),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
-                        context.read<MemoryBloc>().add(const MemoriesRequested());
+                        context
+                            .read<MemoryBloc>()
+                            .add(const MemoriesRequested());
                       },
                       child: const Text('Retry'),
                     ),
@@ -100,20 +101,19 @@ class MemoryScreen extends StatelessWidget {
                       const SizedBox(height: 16),
                       Text(
                         'No memories yet',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white.withOpacity(0.7),
+                                  fontWeight: FontWeight.w600,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Your conversations with Sai Baba will be remembered here',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 14,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withOpacity(0.5),
+                            ),
                       ),
                     ],
                   ),
@@ -152,11 +152,13 @@ class MemoryScreen extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                       memory.memory,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            height: 1.4,
+                                          ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -175,10 +177,12 @@ class MemoryScreen extends StatelessWidget {
                               const SizedBox(height: 8),
                               Text(
                                 _formatDate(memory.createdAt),
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 12,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withOpacity(0.5),
+                                    ),
                               ),
                             ],
                           ),
@@ -278,4 +282,3 @@ class MemoryScreen extends StatelessWidget {
     );
   }
 }
-

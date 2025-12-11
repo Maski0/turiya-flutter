@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// A blinking glowing red dot that appears at the top center of the screen during recording
@@ -8,7 +9,7 @@ class RecordingIndicator extends StatefulWidget {
   final DateTime startTime;
   final int? maxDurationSeconds; // Optional max duration warning
   final VoidCallback? onTap; // Callback when tapped to stop recording
-  
+
   const RecordingIndicator({
     Key? key,
     required this.startTime,
@@ -30,7 +31,7 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
   @override
   void initState() {
     super.initState();
-    
+
     // Blinking animation
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1000),
@@ -67,13 +68,14 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
 
   bool _isNearingMax() {
     if (widget.maxDurationSeconds == null) return false;
-    return _elapsed.inSeconds >= widget.maxDurationSeconds! - 30; // 30 seconds warning
+    return _elapsed.inSeconds >=
+        widget.maxDurationSeconds! - 30; // 30 seconds warning
   }
 
   @override
   Widget build(BuildContext context) {
     final isWarning = _isNearingMax();
-    
+
     return Positioned(
       top: MediaQuery.of(context).padding.top + 10,
       left: 0,
@@ -87,76 +89,76 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
               return GestureDetector(
                 onTap: widget.onTap,
                 child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(20),
-                  border: isWarning
-                      ? Border.all(
-                          color: Colors.orange.withOpacity(0.6),
-                          width: 1.5,
-                        )
-                      : null,
-                ),
-                child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Glowing dot with shadow
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isWarning ? Colors.orange : Colors.red,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isWarning ? Colors.orange : Colors.red)
-                              .withOpacity(_animation.value),
-                          blurRadius: 8 * _animation.value,
-                          spreadRadius: 2 * _animation.value,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: isWarning
+                        ? Border.all(
+                            color: Colors.orange.withOpacity(0.6),
+                            width: 1.5,
+                          )
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Glowing dot with shadow
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isWarning ? Colors.orange : Colors.red,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isWarning ? Colors.orange : Colors.red)
+                                  .withOpacity(_animation.value),
+                              blurRadius: 8 * _animation.value,
+                              spreadRadius: 2 * _animation.value,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Recording text
-                  Text(
-                    'Recording',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Timer
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: (isWarning ? Colors.orange : Colors.red)
-                          .withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _formatDuration(_elapsed),
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.95),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        fontFeatures: const [
-                          FontFeature.tabularFigures(),
-                        ],
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      // Recording text
+                      Text(
+                        'Recording',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Timer
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isWarning ? Colors.orange : Colors.red)
+                              .withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _formatDuration(_elapsed),
+                          style:
+                              Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.95),
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              ),
-            );
-          },
+                ),
+              );
+            },
           ),
         ),
       ),

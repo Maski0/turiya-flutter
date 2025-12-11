@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -107,21 +108,23 @@ class _MenuDrawerState extends State<MenuDrawer> {
                               children: [
                                 Text(
                                   name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   email,
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.58),
-                                    fontSize: 14,
-                                    letterSpacing: 0.2,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withOpacity(0.58),
+                                      ),
                                 ),
                                 const SizedBox(height: 18),
                                 // Credits info
@@ -160,12 +163,13 @@ class _MenuDrawerState extends State<MenuDrawer> {
                                               creditsState.isPro
                                                   ? 'Unlimited'
                                                   : '${creditsState.totalCredits} Credits',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.2,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium
+                                                  ?.copyWith(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                             ),
                                             const SizedBox(width: 8),
                                             Container(
@@ -186,13 +190,16 @@ class _MenuDrawerState extends State<MenuDrawer> {
                                               child: Text(
                                                 creditsState.planType
                                                     .toUpperCase(),
-                                                style: TextStyle(
-                                                  color: creditsState.isPro
-                                                      ? Colors.amber
-                                                      : Colors.blue,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: creditsState.isPro
+                                                          ? Colors.amber
+                                                          : Colors.blue,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                               ),
                                             ),
                                           ],
@@ -248,13 +255,14 @@ class _MenuDrawerState extends State<MenuDrawer> {
                                     Expanded(
                                       child: Text(
                                         option.title,
-                                        style: TextStyle(
-                                          color:
-                                              option.textColor ?? Colors.white,
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.2,
-                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              color: option.textColor ??
+                                                  Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
                                     ),
                                   ],
@@ -318,12 +326,11 @@ class _MenuDrawerState extends State<MenuDrawer> {
                         const SizedBox(width: 7),
                         Text(
                           'Close Menu',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.92),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withOpacity(0.92),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                       ],
                     ),

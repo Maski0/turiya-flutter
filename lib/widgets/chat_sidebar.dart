@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/chat/chat_bloc_export.dart';
 import 'package:intl/intl.dart';
 import '../utils/toast_utils.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 class ChatSidebar extends StatefulWidget {
   final ScrollController scrollController;
@@ -51,6 +50,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
                   border: Border(
                     bottom: BorderSide(
                       color: Colors.white.withOpacity(0.12),
@@ -69,14 +69,12 @@ class _ChatSidebarState extends State<ChatSidebar> {
                       iconSize: 22,
                     ),
                     const SizedBox(width: 10),
-                    const Text(
+                    Text(
                       'Chat with Sathya Sai Baba',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ],
                 ),
@@ -107,22 +105,26 @@ class _ChatSidebarState extends State<ChatSidebar> {
                               color: Colors.white.withOpacity(0.2),
                             ),
                             const SizedBox(height: 20),
-                            const Text(
+                            Text(
                               'No messages yet',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w300,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineLarge
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w300,
+                                  ),
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'Ask Sathya Sai Baba a question',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 16,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
+                                    color: Colors.white.withOpacity(0.5),
+                                  ),
                             ),
                           ],
                         ),
@@ -218,12 +220,13 @@ class _ChatSidebarState extends State<ChatSidebar> {
                             children: [
                               Text(
                                 'Keep exploring...',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.55),
-                                  fontSize: 13,
-                                  fontStyle: FontStyle.italic,
-                                  letterSpacing: 0.2,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Colors.white.withOpacity(0.55),
+                                      fontStyle: FontStyle.italic,
+                                    ),
                               ),
                               const SizedBox(height: 14),
                               // Use ListView.builder for memory efficiency
@@ -266,11 +269,13 @@ class _ChatSidebarState extends State<ChatSidebar> {
                                               Expanded(
                                                 child: Text(
                                                   question,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 15,
-                                                    height: 1.4,
-                                                  ),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyLarge
+                                                      ?.copyWith(
+                                                        color: Colors.white,
+                                                        height: 1.4,
+                                                      ),
                                                 ),
                                               ),
                                             ],
@@ -367,7 +372,7 @@ class _MessageItemState extends State<_MessageItem>
             child: Center(
               child: Text(
                 formattedDate,
-                style: _dateHeaderStyle,
+                style: _dateHeaderStyle(context),
               ),
             ),
           ),
@@ -389,7 +394,7 @@ class _MessageItemState extends State<_MessageItem>
               decoration: _userBubbleDecoration,
               child: Text(
                 widget.message.content,
-                style: _messageTextStyle,
+                style: _messageTextStyle(context),
               ),
             ),
           )
@@ -404,12 +409,12 @@ class _MessageItemState extends State<_MessageItem>
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
                     'Sathya Sai Baba',
-                    style: _speakerNameStyle,
+                    style: _speakerNameStyle(context),
                   ),
                 ),
                 Text(
                   widget.message.content,
-                  style: _messageTextStyle,
+                  style: _messageTextStyle(context),
                 ),
               ],
             ),
@@ -424,7 +429,7 @@ class _MessageItemState extends State<_MessageItem>
             children: [
               Text(
                 formattedTime,
-                style: _timeTextStyle,
+                style: _timeTextStyle(context),
               ),
               if (!isUser)
                 Padding(
@@ -453,32 +458,34 @@ class _MessageItemState extends State<_MessageItem>
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  // Static const styles to avoid recreating on every build
-  static final _dateHeaderStyle = TextStyle(
-    color: Colors.white.withOpacity(0.38),
-    fontSize: 11,
-    letterSpacing: 1.2,
-    fontWeight: FontWeight.w500,
-  );
+  // Style methods using theme (need context)
+  static TextStyle _dateHeaderStyle(BuildContext context) {
+    return Theme.of(context).textTheme.labelSmall!.copyWith(
+          color: Colors.white.withOpacity(0.38),
+          letterSpacing: 1.2,
+          fontWeight: FontWeight.w500,
+        );
+  }
 
-  static final _speakerNameStyle = TextStyle(
-    color: Colors.white.withOpacity(0.58),
-    fontSize: 12,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.3,
-  );
+  static TextStyle _speakerNameStyle(BuildContext context) {
+    return Theme.of(context).textTheme.labelMedium!.copyWith(
+          color: Colors.white.withOpacity(0.58),
+          fontWeight: FontWeight.w600,
+        );
+  }
 
-  static const _messageTextStyle = TextStyle(
-    color: Colors.white,
-    fontSize: 15,
-    height: 1.4,
-    letterSpacing: 0.1,
-  );
+  static TextStyle _messageTextStyle(BuildContext context) {
+    return Theme.of(context).textTheme.bodyMedium!.copyWith(
+          color: Colors.white,
+          height: 1.4,
+        );
+  }
 
-  static final _timeTextStyle = TextStyle(
-    color: Colors.white.withOpacity(0.38),
-    fontSize: 10,
-  );
+  static TextStyle _timeTextStyle(BuildContext context) {
+    return Theme.of(context).textTheme.labelSmall!.copyWith(
+          color: Colors.white.withOpacity(0.38),
+        );
+  }
 
   static final _userBubbleDecoration = BoxDecoration(
     color: Colors.white.withOpacity(0.18),
@@ -503,11 +510,10 @@ class _TypingIndicator extends StatelessWidget {
         children: [
           Text(
             'Sai Baba',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Colors.white.withOpacity(0.6),
+                  fontWeight: FontWeight.w500,
+                ),
           ),
           const SizedBox(height: 4),
           const Row(

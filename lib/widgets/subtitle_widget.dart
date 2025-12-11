@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../theme/app_theme.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/alignment_data.dart';
@@ -19,7 +20,8 @@ class SubtitleWidget extends StatefulWidget {
   State<SubtitleWidget> createState() => _SubtitleWidgetState();
 }
 
-class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProviderStateMixin {
+class _SubtitleWidgetState extends State<SubtitleWidget>
+    with SingleTickerProviderStateMixin {
   String _currentText = '';
   String _previousText = ''; // Text that's already been shown
   String _newText = ''; // New text that's fading in
@@ -28,29 +30,29 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   double _currentTime = 0.0;
   late AnimationController _textFadeController;
   late Animation<double> _textFadeAnimation;
-  
+
   static const double _timingOffsetSeconds = -0.3;
-  
+
   // Debug counter for logging
   int _logCounter = 0;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize fade animation controller
     _textFadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    
+
     _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _textFadeController, curve: Curves.easeIn),
     );
-    
+
     _startPlayback();
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -66,17 +68,19 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   @override
   void didUpdateWidget(SubtitleWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Only restart playback when:
     // 1. Playing state changes (start/stop)
     // 2. Alignment goes from null to not-null (new message starts)
     // 3. Alignment character count DECREASES (means it's a new message, not cumulative update)
     final bool playingStateChanged = widget.isPlaying != oldWidget.isPlaying;
-    final bool newMessageStarted = oldWidget.alignment == null && widget.alignment != null;
-    final bool newMessage = oldWidget.alignment != null && 
-                           widget.alignment != null && 
-                           widget.alignment!.characters.length < oldWidget.alignment!.characters.length;
-    
+    final bool newMessageStarted =
+        oldWidget.alignment == null && widget.alignment != null;
+    final bool newMessage = oldWidget.alignment != null &&
+        widget.alignment != null &&
+        widget.alignment!.characters.length <
+            oldWidget.alignment!.characters.length;
+
     if (playingStateChanged || newMessageStarted || newMessage) {
       _startPlayback();
     }
@@ -86,7 +90,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
 
   void _startPlayback() {
     _timer?.cancel();
-    
+
     if (!widget.isPlaying || widget.alignment == null) {
       setState(() {
         _currentText = '';
@@ -98,11 +102,14 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
 
     // Start subtitle timer immediately (offset applied in _updateText to sync with Unity buffering)
     final offsetMs = _timingOffsetSeconds * 1000;
-    final offsetStr = offsetMs >= 0 ? '+${offsetMs.toStringAsFixed(0)}' : '${offsetMs.toStringAsFixed(0)}';
-    print('⏰ Subtitle timer starting with ${offsetStr}ms offset at ${DateTime.now()}');
-    
+    final offsetStr = offsetMs >= 0
+        ? '+${offsetMs.toStringAsFixed(0)}'
+        : '${offsetMs.toStringAsFixed(0)}';
+    print(
+        '⏰ Subtitle timer starting with ${offsetStr}ms offset at ${DateTime.now()}');
+
     if (!mounted || !widget.isPlaying) return;
-    
+
     // Start subtitle timer
     _playbackStartTime = DateTime.now();
     _currentTime = 0.0;
@@ -117,19 +124,26 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
   }
 
   void _updateText() {
-    if (!widget.isPlaying || widget.alignment == null || _playbackStartTime == null) {
+    if (!widget.isPlaying ||
+        widget.alignment == null ||
+        _playbackStartTime == null) {
       return;
     }
 
     // Calculate current playback time with timing offset
     // Positive offset makes subtitles look ahead in the timeline
-    final rawTime = DateTime.now().difference(_playbackStartTime!).inMilliseconds / 1000.0;
+    final rawTime =
+        DateTime.now().difference(_playbackStartTime!).inMilliseconds / 1000.0;
     _currentTime = rawTime + _timingOffsetSeconds;
-    
+
     // Debug: Log timing info every 500ms
-    if ((_logCounter++ % 30) == 0) {  // Every 30 frames (~500ms at 60fps)
-      final offsetStr = _timingOffsetSeconds >= 0 ? '+${_timingOffsetSeconds}' : '${_timingOffsetSeconds}';
-      print('🕐 Subtitle timing: raw=${rawTime.toStringAsFixed(3)}s, lookingAt=${_currentTime.toStringAsFixed(3)}s, offset=${offsetStr}s');
+    if ((_logCounter++ % 30) == 0) {
+      // Every 30 frames (~500ms at 60fps)
+      final offsetStr = _timingOffsetSeconds >= 0
+          ? '+${_timingOffsetSeconds}'
+          : '${_timingOffsetSeconds}';
+      print(
+          '🕐 Subtitle timing: raw=${rawTime.toStringAsFixed(3)}s, lookingAt=${_currentTime.toStringAsFixed(3)}s, offset=${offsetStr}s');
     }
 
     final alignment = widget.alignment!;
@@ -138,7 +152,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     // Find which character is currently being spoken
     int currentCharIndex = -1;
     bool isInPause = false;
-    
+
     for (int i = 0; i < alignment.characters.length; i++) {
       final startTime = alignment.characterStartTimesSeconds[i];
       final endTime = alignment.characterEndTimesSeconds[i];
@@ -150,7 +164,8 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     }
 
     // If no character is currently being spoken, check if we're in a pause
-    if (currentCharIndex == -1 && alignment.characterEndTimesSeconds.isNotEmpty) {
+    if (currentCharIndex == -1 &&
+        alignment.characterEndTimesSeconds.isNotEmpty) {
       // Find the last character that finished
       int lastSpokenCharIndex = -1;
       for (int i = alignment.characterEndTimesSeconds.length - 1; i >= 0; i--) {
@@ -159,7 +174,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
           break;
         }
       }
-      
+
       // Check if there's a next character to be spoken
       int nextCharIndex = -1;
       for (int i = 0; i < alignment.characters.length; i++) {
@@ -168,13 +183,14 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
           break;
         }
       }
-      
+
       // If we're between characters, check if it's a pause between sentences
       if (lastSpokenCharIndex >= 0 && nextCharIndex >= 0) {
         final lastChar = alignment.characters[lastSpokenCharIndex];
-        final gapDuration = alignment.characterStartTimesSeconds[nextCharIndex] - 
-                           alignment.characterEndTimesSeconds[lastSpokenCharIndex];
-        
+        final gapDuration =
+            alignment.characterStartTimesSeconds[nextCharIndex] -
+                alignment.characterEndTimesSeconds[lastSpokenCharIndex];
+
         // If there's a gap > 100ms after sentence-ending punctuation, it's a pause
         if ('.!?'.contains(lastChar) && gapDuration > 0.1) {
           isInPause = true;
@@ -220,7 +236,9 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
       }
 
       // Build current sentence up to the current character
-      for (int i = sentenceStart; i <= currentCharIndex.clamp(sentenceStart, sentenceEnd); i++) {
+      for (int i = sentenceStart;
+          i <= currentCharIndex.clamp(sentenceStart, sentenceEnd);
+          i++) {
         currentSentence += alignment.characters[i];
       }
     } else {
@@ -265,18 +283,19 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
 
     // Only update if text changed (to avoid unnecessary rebuilds)
     final trimmedSentence = currentSentence.trim();
-    
+
     // Skip updates if text is too short (less than 2 chars) - keep showing previous text
     if (trimmedSentence.length < 2) {
       // Don't clear text, just skip the update
       return;
     }
-    
+
     // Only update if text actually changed
     if (trimmedSentence != _currentText) {
       // Calculate what's new by comparing with current text
-      
-      if (trimmedSentence.startsWith(_currentText) && trimmedSentence.length > _currentText.length) {
+
+      if (trimmedSentence.startsWith(_currentText) &&
+          trimmedSentence.length > _currentText.length) {
         // Text is growing within same sentence - just update without animation
         setState(() {
           _currentText = trimmedSentence;
@@ -294,7 +313,7 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
           _currentText = trimmedSentence;
         });
         _textFadeController.forward(from: 0.0);
-        
+
         // After animation, move to previous text
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted && _currentText == trimmedSentence) {
@@ -332,8 +351,10 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     return Positioned(
       left: 0,
       right: 0,
-      bottom: MediaQuery.of(context).size.height * 0.25, // 25% from bottom (center-ish)
-      child: IgnorePointer(  // Don't block touch events
+      bottom: MediaQuery.of(context).size.height *
+          0.25, // 25% from bottom (center-ish)
+      child: IgnorePointer(
+        // Don't block touch events
         child: AnimatedOpacity(
           opacity: hasText ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 150),
@@ -343,20 +364,21 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                 child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.8,
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.8,
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.08),
+                        Colors.white.withOpacity(0.05),
+                      ],
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withOpacity(0.08),
-                          Colors.white.withOpacity(0.05),
-                        ],
-                      ),
-                    ),
+                  ),
                   child: Stack(
                     children: [
                       // Base layer: Full current text for sizing (invisible)
@@ -365,17 +387,15 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
                         textAlign: TextAlign.center,
                         strutStyle: const StrutStyle(
                           fontFamily: 'Alegreya',
-                          fontSize: 14,
                           height: 1.3,
                           forceStrutHeight: true,
                         ),
-                        style: const TextStyle(
-                          fontFamily: 'Alegreya',
-                          color: Colors.transparent,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 1.3,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontFamily: 'Alegreya',
+                              color: Colors.transparent,
+                              fontWeight: FontWeight.w500,
+                              height: 1.3,
+                            ),
                       ),
                       // Visible layer: Previous text + fading new text combined
                       Positioned.fill(
@@ -383,10 +403,12 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
                           alignment: Alignment.center,
                           child: Text.rich(
                             TextSpan(
-                              style: const TextStyle(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
                                 fontFamily: 'Alegreya',
                                 color: Colors.white,
-                                fontSize: 14,
                                 fontWeight: FontWeight.w500,
                                 height: 1.3,
                                 shadows: [
@@ -412,14 +434,15 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
                                       _newText,
                                       strutStyle: const StrutStyle(
                                         fontFamily: 'Alegreya',
-                                        fontSize: 14,
                                         height: 1.3,
                                         forceStrutHeight: true,
                                       ),
-                                      style: const TextStyle(
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
                                         fontFamily: 'Alegreya',
                                         color: Colors.white,
-                                        fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                         height: 1.3,
                                         shadows: [
@@ -437,7 +460,6 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
                             ),
                             strutStyle: const StrutStyle(
                               fontFamily: 'Alegreya',
-                              fontSize: 14,
                               height: 1.3,
                               forceStrutHeight: true,
                             ),
@@ -456,4 +478,3 @@ class _SubtitleWidgetState extends State<SubtitleWidget> with SingleTickerProvid
     );
   }
 }
-

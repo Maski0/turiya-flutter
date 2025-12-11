@@ -70,9 +70,10 @@ class ProfileAvatarWidget extends StatelessWidget {
                                 avatarUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
-                                    _buildDefaultAvatar(user.email ?? 'U'),
+                                    _buildDefaultAvatar(
+                                        user.email ?? 'U', context),
                               )
-                            : _buildDefaultAvatar(user.email ?? 'U'),
+                            : _buildDefaultAvatar(user.email ?? 'U', context),
                       ),
                     ),
                     // Credits badge (bottom right)
@@ -80,7 +81,7 @@ class ProfileAvatarWidget extends StatelessWidget {
                       Positioned(
                         right: -2,
                         bottom: -2,
-                        child:                         Container(
+                        child: Container(
                           constraints: const BoxConstraints(minWidth: 18),
                           height: 18,
                           padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -107,12 +108,15 @@ class ProfileAvatarWidget extends StatelessWidget {
                           child: Center(
                             child: Text(
                               displayText,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: displayText == '★' ? 10 : 9,
-                                fontWeight: FontWeight.bold,
-                                height: 1.0,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontSize: displayText == '★' ? 10 : 9,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.0,
+                                  ),
                             ),
                           ),
                         ),
@@ -127,21 +131,19 @@ class ProfileAvatarWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildDefaultAvatar(String email) {
+  Widget _buildDefaultAvatar(String email, BuildContext context) {
     final initial = email.isNotEmpty ? email[0].toUpperCase() : 'U';
     return Container(
       color: Colors.blueGrey[700],
       child: Center(
         child: Text(
           initial,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
         ),
       ),
     );
   }
 }
-

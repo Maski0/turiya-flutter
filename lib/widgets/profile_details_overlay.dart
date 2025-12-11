@@ -79,9 +79,10 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                           fit: BoxFit.cover,
                                           errorBuilder:
                                               (context, error, stackTrace) =>
-                                                  _buildDefaultAvatar(email),
+                                                  _buildDefaultAvatar(
+                                                      email, context),
                                         )
-                                      : _buildDefaultAvatar(email),
+                                      : _buildDefaultAvatar(email, context),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -89,11 +90,13 @@ class ProfileDetailsOverlay extends StatelessWidget {
                               // Name
                               Text(
                                 name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 4),
@@ -101,10 +104,12 @@ class ProfileDetailsOverlay extends StatelessWidget {
                               // Email
                               Text(
                                 email,
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 14,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withOpacity(0.6),
+                                    ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 24),
@@ -129,11 +134,13 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                         children: [
                                           Text(
                                             'Plan',
-                                            style: TextStyle(
-                                              color:
-                                                  Colors.white.withOpacity(0.6),
-                                              fontSize: 14,
-                                            ),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Colors.white
+                                                      .withOpacity(0.6),
+                                                ),
                                           ),
                                           Container(
                                             padding: const EdgeInsets.symmetric(
@@ -142,8 +149,10 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                             ),
                                             decoration: BoxDecoration(
                                               color: creditsState.isPro
-                                                  ? Colors.amber.withOpacity(0.2)
-                                                  : Colors.blue.withOpacity(0.2),
+                                                  ? Colors.amber
+                                                      .withOpacity(0.2)
+                                                  : Colors.blue
+                                                      .withOpacity(0.2),
                                               borderRadius:
                                                   BorderRadius.circular(12),
                                               border: Border.all(
@@ -171,13 +180,17 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                                 Text(
                                                   creditsState.planType
                                                       .toUpperCase(),
-                                                  style: TextStyle(
-                                                    color: creditsState.isPro
-                                                        ? Colors.amber
-                                                        : Colors.blue,
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelMedium
+                                                      ?.copyWith(
+                                                        color:
+                                                            creditsState.isPro
+                                                                ? Colors.amber
+                                                                : Colors.blue,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                 ),
                                               ],
                                             ),
@@ -191,11 +204,13 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                         children: [
                                           Text(
                                             'Credits',
-                                            style: TextStyle(
-                                              color:
-                                                  Colors.white.withOpacity(0.6),
-                                              fontSize: 14,
-                                            ),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Colors.white
+                                                      .withOpacity(0.6),
+                                                ),
                                           ),
                                           Row(
                                             children: [
@@ -208,11 +223,14 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                               else
                                                 Text(
                                                   '${creditsState.totalCredits}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .headlineSmall
+                                                      ?.copyWith(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                 ),
                                             ],
                                           ),
@@ -228,19 +246,23 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                           children: [
                                             Text(
                                               'Free Credits',
-                                              style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.5),
-                                                fontSize: 12,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                    color: Colors.white
+                                                        .withOpacity(0.5),
+                                                  ),
                                             ),
                                             Text(
                                               '${creditsState.currentCredits}',
-                                              style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.7),
-                                                fontSize: 14,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium
+                                                  ?.copyWith(
+                                                    color: Colors.white
+                                                        .withOpacity(0.7),
+                                                  ),
                                             ),
                                           ],
                                         ),
@@ -251,19 +273,23 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                           children: [
                                             Text(
                                               'Purchased',
-                                              style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.5),
-                                                fontSize: 12,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                    color: Colors.white
+                                                        .withOpacity(0.5),
+                                                  ),
                                             ),
                                             Text(
                                               '${creditsState.purchasedCredits}',
-                                              style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.7),
-                                                fontSize: 14,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium
+                                                  ?.copyWith(
+                                                    color: Colors.white
+                                                        .withOpacity(0.7),
+                                                  ),
                                             ),
                                           ],
                                         ),
@@ -279,10 +305,12 @@ class ProfileDetailsOverlay extends StatelessWidget {
                               else if (creditsState is CreditsError)
                                 Text(
                                   'Failed to load credits',
-                                  style: TextStyle(
-                                    color: Colors.red.withOpacity(0.8),
-                                    fontSize: 14,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.red.withOpacity(0.8),
+                                      ),
                                 ),
 
                               const SizedBox(height: 24),
@@ -319,11 +347,14 @@ class ProfileDetailsOverlay extends StatelessWidget {
                                       const SizedBox(width: 6),
                                       Text(
                                         'Close',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color:
+                                                  Colors.white.withOpacity(0.9),
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -344,21 +375,19 @@ class ProfileDetailsOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildDefaultAvatar(String email) {
+  Widget _buildDefaultAvatar(String email, BuildContext context) {
     final initial = email.isNotEmpty ? email[0].toUpperCase() : 'U';
     return Container(
       color: Colors.blueGrey[700],
       child: Center(
         child: Text(
           initial,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
         ),
       ),
     );
   }
 }
-

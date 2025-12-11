@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../theme/app_theme.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -30,7 +31,8 @@ class RecordingPreviewOverlay extends StatefulWidget {
   }
 
   @override
-  State<RecordingPreviewOverlay> createState() => _RecordingPreviewOverlayState();
+  State<RecordingPreviewOverlay> createState() =>
+      _RecordingPreviewOverlayState();
 }
 
 class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
@@ -57,14 +59,14 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
 
       _videoController = VideoPlayerController.file(file);
       await _videoController!.initialize();
-      
+
       // Listen to video position changes to update progress bar
       _videoController!.addListener(() {
         if (mounted) {
           setState(() {});
         }
       });
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -135,14 +137,15 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
     );
 
     if (confirm == true && mounted) {
-      bool deleted = await ScreenRecordingService().deleteRecording(widget.videoPath);
+      bool deleted =
+          await ScreenRecordingService().deleteRecording(widget.videoPath);
       if (mounted) {
         // Close the dialog first to avoid Navigator conflicts
         widget.onClose();
-        
+
         // Show toast after a small delay to ensure dialog is dismissed
         await Future.delayed(const Duration(milliseconds: 100));
-        
+
         if (mounted) {
           if (deleted) {
             ToastUtils.showSuccess(context, 'Recording deleted');
@@ -156,7 +159,7 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
 
   void _togglePlayPause() {
     if (_videoController == null) return;
-    
+
     setState(() {
       if (_videoController!.value.isPlaying) {
         _videoController!.pause();
@@ -171,7 +174,7 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
     final hours = twoDigits(duration.inHours);
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    
+
     if (duration.inHours > 0) {
       return '$hours:$minutes:$seconds';
     }
@@ -183,7 +186,7 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
     final screenHeight = MediaQuery.of(context).size.height;
     final topPadding = MediaQuery.of(context).padding.top;
     final videoHeight = screenHeight * 0.7;
-    
+
     return Material(
       type: MaterialType.transparency,
       child: BackdropFilter(
@@ -198,150 +201,164 @@ class _RecordingPreviewOverlayState extends State<RecordingPreviewOverlay> {
                 children: [
                   // Top spacing for close button
                   SizedBox(height: topPadding + 60),
-                  
+
                   // Video preview
-                    GestureDetector(
-                      onTap: _togglePlayPause,
-                      child: Container(
-                        width: double.infinity,
-                        height: videoHeight,
-                        color: Colors.black,
-                        child: _isLoading
-                              ? Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white.withOpacity(0.8),
-                                  ),
+                  GestureDetector(
+                    onTap: _togglePlayPause,
+                    child: Container(
+                      width: double.infinity,
+                      height: videoHeight,
+                      color: Colors.black,
+                      child: _isLoading
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                            )
+                          : _error != null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 48,
+                                      color: Colors.red.withOpacity(0.8),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _error!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color:
+                                                Colors.white.withOpacity(0.8),
+                                          ),
+                                    ),
+                                  ],
                                 )
-                              : _error != null
-                                  ? Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.error_outline,
-                                          size: 48,
-                                          color: Colors.red.withOpacity(0.8),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          _error!,
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.8),
-                                            fontSize: 14,
+                              : Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Video player
+                                    if (_videoController != null)
+                                      SizedBox.expand(
+                                        child: FittedBox(
+                                          fit: BoxFit.contain,
+                                          child: SizedBox(
+                                            width: _videoController!
+                                                .value.size.width,
+                                            height: _videoController!
+                                                .value.size.height,
+                                            child:
+                                                VideoPlayer(_videoController!),
                                           ),
                                         ),
-                                      ],
-                                    )
-                                  : Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        // Video player
-                                        if (_videoController != null)
-                                          SizedBox.expand(
-                                            child: FittedBox(
-                                              fit: BoxFit.contain,
-                                              child: SizedBox(
-                                                width: _videoController!.value.size.width,
-                                                height: _videoController!.value.size.height,
-                                                child: VideoPlayer(_videoController!),
-                                              ),
-                                            ),
+                                      ),
+
+                                    // Play/Pause overlay
+                                    if (_videoController != null &&
+                                        !_videoController!.value.isPlaying)
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.5),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        padding: const EdgeInsets.all(20),
+                                        child: Icon(
+                                          Icons.play_arrow,
+                                          size: 64,
+                                          color: Colors.white.withOpacity(0.9),
+                                        ),
+                                      ),
+
+                                    // Time display (bottom right)
+                                    if (_videoController != null)
+                                      Positioned(
+                                        bottom: 16,
+                                        right: 16,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
                                           ),
-                                        
-                                        // Play/Pause overlay
-                                        if (_videoController != null && !_videoController!.value.isPlaying)
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.5),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            padding: const EdgeInsets.all(20),
-                                            child: Icon(
-                                              Icons.play_arrow,
-                                              size: 64,
-                                              color: Colors.white.withOpacity(0.9),
-                                            ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                Colors.black.withOpacity(0.7),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                           ),
-                                        
-                                        // Time display (bottom right)
-                                        if (_videoController != null)
-                                          Positioned(
-                                            bottom: 16,
-                                            right: 16,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 6,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.7),
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                '${_formatDuration(_videoController!.value.position)} / ${_formatDuration(_videoController!.value.duration)}',
-                                                style: const TextStyle(
+                                          child: Text(
+                                            '${_formatDuration(_videoController!.value.position)} / ${_formatDuration(_videoController!.value.duration)}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
                                                   color: Colors.white,
-                                                  fontSize: 13,
                                                   fontWeight: FontWeight.w500,
                                                 ),
-                                              ),
-                                            ),
                                           ),
-                                        
-                                        // Progress bar (bottom)
-                                        if (_videoController != null)
-                                          Positioned(
-                                            bottom: 0,
-                                            left: 0,
-                                            right: 0,
-                                            child: VideoProgressIndicator(
-                                              _videoController!,
-                                              allowScrubbing: true,
-                                              padding: const EdgeInsets.symmetric(vertical: 4),
-                                              colors: VideoProgressColors(
-                                                playedColor: Colors.blue,
-                                                bufferedColor: Colors.white.withOpacity(0.3),
-                                                backgroundColor: Colors.white.withOpacity(0.1),
-                                              ),
-                                            ),
+                                        ),
+                                      ),
+
+                                    // Progress bar (bottom)
+                                    if (_videoController != null)
+                                      Positioned(
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: VideoProgressIndicator(
+                                          _videoController!,
+                                          allowScrubbing: true,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 4),
+                                          colors: VideoProgressColors(
+                                            playedColor: Colors.blue,
+                                            bufferedColor:
+                                                Colors.white.withOpacity(0.3),
+                                            backgroundColor:
+                                                Colors.white.withOpacity(0.1),
                                           ),
-                                      ],
-                                    ),
-                      ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Action buttons
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          // Delete button
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.delete_outline,
-                              label: 'Delete',
-                              color: Colors.red,
-                              onTap: _deleteVideo,
-                            ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Action buttons
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        // Delete button
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                            color: Colors.red,
+                            onTap: _deleteVideo,
                           ),
-                          const SizedBox(width: 16),
-                          // Share button
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.share,
-                              label: 'Share',
-                              color: Colors.blue,
-                              isPrimary: true,
-                              onTap: _shareVideo,
-                            ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Share button
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.share,
+                            label: 'Share',
+                            color: Colors.blue,
+                            isPrimary: true,
+                            onTap: _shareVideo,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              
+                  ),
+                ],
+              ),
+
               // Close button (top right)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
@@ -429,11 +446,10 @@ class _ActionButton extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(
-                  color: isPrimary ? Colors.white : color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: isPrimary ? Colors.white : color,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ],
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import '../services/screen_recording_service.dart';
 import '../utils/toast_utils.dart';
 
@@ -27,7 +28,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
   void initState() {
     super.initState();
     _isRecording = _recordingService.isRecording;
-    
+
     // Pulse animation for recording indicator
     _pulseController = AnimationController(
       vsync: this,
@@ -45,9 +46,9 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
     if (_isRecording) {
       // Show processing dialog
       if (!mounted) return;
-      
+
       String processingMessage = 'Processing frames...';
-      
+
       // Set up callback to update dialog
       _recordingService.setProcessingCallback((message) {
         processingMessage = message;
@@ -55,7 +56,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
           setState(() {}); // Trigger rebuild to update dialog
         }
       });
-      
+
       // Show modal dialog
       showDialog(
         context: context,
@@ -68,7 +69,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
                 processingMessage = message;
                 setDialogState(() {});
               });
-              
+
               return WillPopScope(
                 onWillPop: () async => false,
                 child: AlertDialog(
@@ -79,7 +80,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
                       const SizedBox(height: 20),
                       Text(
                         processingMessage,
-                        style: const TextStyle(fontSize: 16),
+                        style: Theme.of(context).textTheme.bodyLarge,
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -90,15 +91,15 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
           );
         },
       );
-      
+
       // Stop recording (this will take time)
       String? path = await _recordingService.stopRecording();
-      
+
       // Close processing dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       setState(() {
         _isRecording = false;
       });
@@ -123,7 +124,7 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
       // Start recording with internal audio only (no microphone)
       _recordingService.setAudioCaptureMode(internalOnly: true);
       bool started = await _recordingService.startRecording();
-      
+
       setState(() {
         _isRecording = started;
       });
@@ -159,7 +160,8 @@ class _ScreenRecordingButtonState extends State<ScreenRecordingButton>
                   height: 56 * (1 + _pulseController.value * 0.3),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.red.withOpacity(0.3 * (1 - _pulseController.value)),
+                    color: Colors.red
+                        .withOpacity(0.3 * (1 - _pulseController.value)),
                   ),
                 ),
               // Icon
@@ -205,9 +207,9 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
     if (_isRecording) {
       // Show processing dialog
       if (!mounted) return;
-      
+
       String processingMessage = 'Processing frames...';
-      
+
       // Show modal dialog
       showDialog(
         context: context,
@@ -220,7 +222,7 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
                 processingMessage = message;
                 setDialogState(() {});
               });
-              
+
               return WillPopScope(
                 onWillPop: () async => false,
                 child: AlertDialog(
@@ -231,7 +233,7 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
                       const SizedBox(height: 20),
                       Text(
                         processingMessage,
-                        style: const TextStyle(fontSize: 16),
+                        style: Theme.of(context).textTheme.bodyLarge,
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -242,15 +244,15 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
           );
         },
       );
-      
+
       // Stop recording
       String? path = await _recordingService.stopRecording();
-      
+
       // Close processing dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       setState(() {
         _isRecording = false;
       });
@@ -295,4 +297,3 @@ class _ScreenRecordingToggleState extends State<ScreenRecordingToggle> {
     );
   }
 }
-

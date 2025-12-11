@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'animated_dots.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../theme/app_theme.dart';
 
 class BottomInputBar extends StatefulWidget {
   final TextEditingController textController;
@@ -123,110 +123,113 @@ class _BottomInputBarState extends State<BottomInputBar>
                     topRight: Radius.circular(26),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 18, 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: AnimatedBuilder(
-                          animation: _textFadeAnimation,
-                          builder: (context, child) {
-                            return TextField(
-                              controller: widget.textController,
-                              focusNode: widget.focusNode,
-                              readOnly:
-                                  widget.isGenerating || widget.isAudioPlaying,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 0.2,
-                                height: 1.4,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: _previousHintText,
-                                hintStyle: TextStyle(
-                                  color: Colors.white54.withOpacity(
-                                      _textFadeAnimation.value * 0.50),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w300,
-                                  fontStyle: (widget.isGenerating ||
-                                          widget.isAudioPlaying)
-                                      ? FontStyle.italic
-                                      : FontStyle.normal,
-                                  letterSpacing: 0.2,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                                isDense: true,
-                              ),
-                              onSubmitted: widget.onSubmit,
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Mic button (with recording indicator) - hidden when generating or narrating
-                      // Keep the space even when hidden to maintain consistent height
-                      SizedBox(
-                        width: (!widget.isGenerating && !widget.isAudioPlaying)
-                            ? 32
-                            : 0,
-                        height: 32,
-                        child: (!widget.isGenerating && !widget.isAudioPlaying)
-                            ? GestureDetector(
-                                onTap: widget.onMicTap,
-                                onLongPress: widget.onMicLongPress,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Pulsing circle when recording
-                                    if (widget.isRecording)
-                                      Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.red.withOpacity(0.3),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 18, 24),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: AnimatedBuilder(
+                              animation: _textFadeAnimation,
+                              builder: (context, child) {
+                                return TextField(
+                                  controller: widget.textController,
+                                  focusNode: widget.focusNode,
+                                  readOnly: widget.isGenerating ||
+                                      widget.isAudioPlaying,
+                                  style: AppTheme.body(context, height: 1.4),
+                                  decoration: InputDecoration(
+                                    hintText: _previousHintText,
+                                    hintStyle: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(
+                                          color: Colors.white54.withOpacity(
+                                              _textFadeAnimation.value * 0.50),
+                                          fontWeight: FontWeight.w300,
+                                          fontStyle: (widget.isGenerating ||
+                                                  widget.isAudioPlaying)
+                                              ? FontStyle.italic
+                                              : FontStyle.normal,
+                                          letterSpacing: 0.2,
                                         ),
-                                      ),
-                                    // Mic icon
-                                    Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(
-                                        widget.isRecording
-                                            ? Icons.mic
-                                            : Icons.mic_none,
-                                        color: widget.isRecording
-                                            ? Colors.red
-                                            : Colors.white.withOpacity(0.8),
-                                        size: 24,
-                                      ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                    isDense: true,
+                                  ),
+                                  onSubmitted: widget.onSubmit,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Mic button (with recording indicator) - hidden when generating or narrating
+                          // Keep the space even when hidden to maintain consistent height
+                          SizedBox(
+                            width:
+                                (!widget.isGenerating && !widget.isAudioPlaying)
+                                    ? 32
+                                    : 0,
+                            height: 32,
+                            child: (!widget.isGenerating &&
+                                    !widget.isAudioPlaying)
+                                ? GestureDetector(
+                                    onTap: widget.onMicTap,
+                                    onLongPress: widget.onMicLongPress,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        // Pulsing circle when recording
+                                        if (widget.isRecording)
+                                          Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color:
+                                                  Colors.red.withOpacity(0.3),
+                                            ),
+                                          ),
+                                        // Mic icon
+                                        Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: Icon(
+                                            widget.isRecording
+                                                ? Icons.mic
+                                                : Icons.mic_none,
+                                            color: widget.isRecording
+                                                ? Colors.red
+                                                : Colors.white.withOpacity(0.8),
+                                            size: 24,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              )
-                            : null,
-                      ),
-                      SizedBox(
-                          width:
-                              (!widget.isGenerating && !widget.isAudioPlaying)
+                                  )
+                                : null,
+                          ),
+                          SizedBox(
+                              width: (!widget.isGenerating &&
+                                      !widget.isAudioPlaying)
                                   ? 12
                                   : 0),
-                      // Send button (arrow) - disabled when recording
-                      GestureDetector(
-                        onTap: (widget.isGenerating ||
-                                widget.isRecording ||
-                                widget.isAudioPlaying)
-                            ? null
-                            : () => widget.onSubmit(widget.textController.text),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child:
-                                (widget.isGenerating || widget.isAudioPlaying)
+                          // Send button (arrow) - disabled when recording
+                          GestureDetector(
+                            onTap: (widget.isGenerating ||
+                                    widget.isRecording ||
+                                    widget.isAudioPlaying)
+                                ? null
+                                : () =>
+                                    widget.onSubmit(widget.textController.text),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: (widget.isGenerating ||
+                                        widget.isAudioPlaying)
                                     ? Center(
                                         child: AnimatedDots(
                                           size: 4.0,
@@ -240,11 +243,13 @@ class _BottomInputBarState extends State<BottomInputBar>
                                             : Colors.white.withOpacity(0.8),
                                         size: 24,
                                       ),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
