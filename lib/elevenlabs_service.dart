@@ -13,31 +13,37 @@ class ElevenLabsService {
 
   /// Streams audio with timestamps from backend TTS proxy
   /// Backend handles ElevenLabs API call (API key stays secure on server)
-  Stream<AudioChunk> streamTextToSpeechWithTimestamps(String text) async* {
+  /// [language] can be 'telugu' or 'english' to select appropriate voice
+  Stream<AudioChunk> streamTextToSpeechWithTimestamps(
+    String text, {
+    String language = 'telugu',
+  }) async* {
     final url = Uri.parse('$backendUrl/tts-stream');
 
     final headers = {
       'Content-Type': 'application/json',
     };
-    
+
     // Get auth token dynamically at call time
     final authToken = getAuthToken();
     if (authToken != null) {
       headers['Authorization'] = 'Bearer $authToken';
     }
 
-    print('🎙️ TTS Request: $url with ${text.length} chars, auth=${authToken != null}');
-    
+    print(
+        '🎙️ TTS Request: $url with ${text.length} chars, language=$language, auth=${authToken != null}');
+
     final response = await http.Client().send(
       http.Request('POST', url)
         ..headers.addAll(headers)
         ..body = jsonEncode({
           'text': text,
+          'language': language, // Pass language to backend
         }),
     );
 
     print('🎙️ TTS Response: ${response.statusCode}');
-    
+
     if (response.statusCode != 200) {
       throw Exception('Failed to generate speech: ${response.statusCode}');
     }
@@ -49,16 +55,16 @@ class ElevenLabsService {
     await for (final chunk in response.stream) {
       totalBytes += chunk.length;
       buffer += utf8.decode(chunk);
-      
+
       // Split by newlines to get individual JSON objects
       final lines = buffer.split('\n');
       // Keep the last incomplete line in buffer
       buffer = lines.removeLast();
-      
+
       for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
-        
+
         try {
           final json = jsonDecode(trimmed) as Map<String, dynamic>;
           chunksParsed++;
@@ -72,9 +78,9 @@ class ElevenLabsService {
         }
       }
     }
-    
+
     print('✅ TTS stream complete: $totalBytes bytes, $chunksParsed chunks');
-    
+
     // Process any remaining data in buffer
     if (buffer.trim().isNotEmpty) {
       try {

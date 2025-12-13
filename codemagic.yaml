@@ -1,0 +1,109 @@
+workflows:
+  ios-release-workflow:
+    name: iOS App Store Release
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: Turiya iOS
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.yourcompany.turiya
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.yourcompany.turiya"
+        APP_STORE_APPLE_ID: "YOUR_APP_STORE_ID"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+        ignore_failure: true
+      - name: Flutter test
+        script: |
+          flutter test
+        ignore_failure: true
+      - name: Build iOS IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - amarjeetsarma@example.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+
+        # TestFlight
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+
+        # App Store (uncomment when ready for production)
+        submit_to_app_store: false
+        # release_type: MANUAL
+        # phased_release: false
+
+  ios-testflight-workflow:
+    name: iOS TestFlight Only
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Turiya iOS
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.yourcompany.turiya
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build iOS IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - amarjeetsarma@example.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers

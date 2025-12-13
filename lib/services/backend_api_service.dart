@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 class BackendApiService {
   static String get baseUrl => dotenv.env['BACKEND_URL']!;
   final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
-  
+
   /// Get current Supabase access token (JWT)
   /// This is the token that the backend expects (same as web!)
   String? getAccessToken() {
@@ -29,6 +29,7 @@ class BackendApiService {
     String? threadId,
     String model = 'claude-sonnet-4-0',
     String agentId = 'krsna-agent',
+    String language = 'telugu',
   }) async {
     final token = getAccessToken();
     if (token == null) throw Exception('Not authenticated');
@@ -40,13 +41,14 @@ class BackendApiService {
       Uri.parse('$baseUrl/$agentId/invoke'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',  // Supabase JWT (same as web!)
+        'Authorization': 'Bearer $token', // Supabase JWT (same as web!)
       },
       body: jsonEncode({
         'message': message,
         'model': model,
         'thread_id': threadId,
         'user_id': userId,
+        'language': language, // Pass language to backend
         'agent_config': {
           'spicy_level': 0.8,
         },
@@ -64,16 +66,17 @@ class BackendApiService {
       // Validation error - log details
       print('❌ 422 Validation Error');
       print('Request body: ${jsonEncode({
-        'message': message,
-        'model': model,
-        'thread_id': threadId,
-        'user_id': userId,
-        'agent_config': {'spicy_level': 0.8},
-      })}');
+            'message': message,
+            'model': model,
+            'thread_id': threadId,
+            'user_id': userId,
+            'agent_config': {'spicy_level': 0.8},
+          })}');
       print('Response: ${response.body}');
       throw Exception('Validation error: ${response.body}');
     } else {
-      throw Exception('API call failed: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'API call failed: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -96,7 +99,7 @@ class BackendApiService {
     )
       ..headers.addAll({
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',  // Supabase JWT
+        'Authorization': 'Bearer $token', // Supabase JWT
       })
       ..body = jsonEncode({
         'message': message,

@@ -140,6 +140,9 @@ class _MainScreenState extends State<_MainScreen>
   // Track currently playing message to prevent duplicates
   String? _currentlyPlayingMessageId;
 
+  // Language selection
+  String _selectedLanguage = 'telugu'; // 'telugu' or 'english'
+
   @override
   void initState() {
     super.initState();
@@ -169,6 +172,32 @@ class _MainScreenState extends State<_MainScreen>
 
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
+
+    // Set initial Unity avatar state to listening
+    _updateUnityAvatarState();
+  }
+
+  /// Updates Unity avatar state based on current Flutter app state
+  /// - "listening" = default/idle state
+  /// - "thinking" = when _isGenerating is true (pondering response)
+  /// - "speaking" = when _isAudioPlaying is true (narrating response)
+  void _updateUnityAvatarState() {
+    String state;
+
+    if (_isAudioPlaying) {
+      state = "speaking";
+    } else if (_isGenerating) {
+      state = "thinking";
+    } else {
+      state = "listening";
+    }
+
+    try {
+      sendToUnity("Flutter", "AvatarState", state);
+      print('🎭 Unity avatar state changed to: $state');
+    } catch (e) {
+      print('⚠️ Failed to update Unity avatar state: $e');
+    }
   }
 
   void _startChipAutoHideTimer() {
@@ -515,6 +544,9 @@ class _MainScreenState extends State<_MainScreen>
                 _currentlyPlayingMessageId = null;
               });
 
+              // Update Unity avatar to listening state
+              _updateUnityAvatarState();
+
               // Close menu drawer if open
               if (_showMenuDrawer) {
                 _animationController.reverse().then((_) {
@@ -566,6 +598,9 @@ class _MainScreenState extends State<_MainScreen>
                   });
                   print(
                       '✅ Synced state from ChatLoaded: _isGenerating=false, _showUserMessageBubble=false');
+
+                  // Update Unity avatar to listening state
+                  _updateUnityAvatarState();
                 }
               }
 
@@ -596,26 +631,34 @@ class _MainScreenState extends State<_MainScreen>
                     print('📝 Text length: ${message.content.length} chars');
 
                     // Clear previous alignment and start audio playback immediately
-                    // Keep _isGenerating = true to show "Narrating..." state
+                    // Set _isGenerating = false so status shows "Narrating..." (not "Pondering...")
+                    // Track when streaming starts to calculate correct wait time
+                    final streamingStartTime = DateTime.now();
+
                     if (mounted) {
                       setState(() {
                         _currentAlignment = null;
                         _isAudioPlaying =
                             true; // Start showing subtitles immediately
-                        // _isGenerating stays true - will show "Narrating..." in status widget
+                        _isGenerating =
+                            false; // IMPORTANT: Set to false so "Narrating..." shows (not "Pondering...")
                         _showFollowUps =
                             false; // Hide follow-ups when audio starts
                       });
                       print(
-                          '🔊 Set _isAudioPlaying = true BEFORE streamToUnity at ${DateTime.now()}');
+                          '🔊 Set _isAudioPlaying = true at $streamingStartTime');
                       print(
-                          '🎵 Keeping _isGenerating = true (will show Narrating...)');
+                          '🎵 Set _isGenerating = false (will show "Narrating..." in status)');
+
+                      // Update Unity avatar to speaking state
+                      _updateUnityAvatarState();
                     }
 
                     // Content is already parsed in ChatMessage.fromJson, use directly
                     final consolidatedAlignment =
                         await _audioStreamer.streamToUnity(
                       message.content,
+                      language: _selectedLanguage, // Pass selected language
                       onAlignmentUpdate: (alignment) {
                         // Update alignment data as chunks arrive - subtitles will update in real-time
                         if (mounted) {
@@ -659,52 +702,67 @@ class _MainScreenState extends State<_MainScreen>
                     // Clear the currently playing message ID
                     _currentlyPlayingMessageId = null;
 
-                    // Stop showing subtitles after the actual audio duration
-                    Future.delayed(
-                        Duration(milliseconds: (audioDuration * 1000).toInt()),
-                        () async {
-                      if (mounted) {
+                    // Calculate how much time has elapsed since streaming started
+                    // Unity starts playing when first batches arrive (during streaming), not after
+                    final elapsedTime =
+                        DateTime.now().difference(streamingStartTime);
+                    final elapsedSeconds = elapsedTime.inMilliseconds / 1000.0;
+                    final remainingTime = audioDuration - elapsedSeconds;
+
+                    print(
+                        '⏱️ Time elapsed since streaming started: ${elapsedSeconds.toStringAsFixed(2)}s');
+                    print(
+                        '🎵 Total audio duration: ${audioDuration.toStringAsFixed(2)}s');
+                    print(
+                        '⏳ Remaining time to wait: ${remainingTime.toStringAsFixed(2)}s');
+
+                    // Only wait if there's remaining time (audio might already be done!)
+                    if (remainingTime > 0) {
+                      await Future.delayed(Duration(
+                          milliseconds: (remainingTime * 1000).toInt()));
+                    } else {
+                      print('✅ Audio already finished! No need to wait.');
+                    }
+
+                    if (mounted) {
+                      setState(() {
+                        _isAudioPlaying = false;
+                        _currentAlignment = null; // Clear alignment data
+                        // _isGenerating already set to false when audio started
+                      });
+                      print('🔇 Audio playback complete, state reset');
+
+                      // Update Unity avatar to listening state
+                      _updateUnityAvatarState();
+
+                      sendToUnity("Flutter", "OnAudioChunk", "END");
+                      print(
+                          '🏁 END signal sent to Unity (audio playback complete)');
+
+                      // Fade out user message bubble
+                      if (_showUserMessageBubble) {
                         setState(() {
-                          _isAudioPlaying = false;
-                          _currentAlignment = null; // Clear alignment data too
-                          _isGenerating =
-                              false; // Reset generating state after audio finishes
+                          _showUserMessageBubble = false;
                         });
-                        print(
-                            '🔇 Subtitles hidden after ${audioDuration.toStringAsFixed(2)}s');
-                        print('✅ Reset _isGenerating = false (audio finished)');
 
-                        sendToUnity("Flutter", "OnAudioChunk", "END");
-                        print(
-                            '🏁 END signal sent to Unity (audio playback complete)');
+                        // Wait for fade-out, then fade in follow-ups
+                        await Future.delayed(const Duration(milliseconds: 400));
 
-                        // Fade out user message bubble
-                        if (_showUserMessageBubble) {
-                          setState(() {
-                            _showUserMessageBubble = false;
+                        // Trigger follow-up animations
+                        if (state.followUpQuestions.isNotEmpty) {
+                          _previousFollowUps = state.followUpQuestions;
+                          _showFollowUps = false;
+                          // Small delay before fade-in
+                          Future.delayed(const Duration(milliseconds: 50), () {
+                            if (mounted) {
+                              setState(() {
+                                _showFollowUps = true;
+                              });
+                            }
                           });
-
-                          // Wait for fade-out, then fade in follow-ups
-                          await Future.delayed(
-                              const Duration(milliseconds: 400));
-
-                          // Trigger follow-up animations
-                          if (state.followUpQuestions.isNotEmpty) {
-                            _previousFollowUps = state.followUpQuestions;
-                            _showFollowUps = false;
-                            // Small delay before fade-in
-                            Future.delayed(const Duration(milliseconds: 50),
-                                () {
-                              if (mounted) {
-                                setState(() {
-                                  _showFollowUps = true;
-                                });
-                              }
-                            });
-                          }
                         }
                       }
-                    });
+                    }
                   } catch (e) {
                     print('❌ TTS Error: $e');
                     // Clear the currently playing message ID on error
@@ -724,6 +782,9 @@ class _MainScreenState extends State<_MainScreen>
                         _isGenerating =
                             false; // Reset generating state on error
                       });
+
+                      // Update Unity avatar to listening state
+                      _updateUnityAvatarState();
 
                       // Show follow-ups after a delay
                       Future.delayed(const Duration(milliseconds: 400), () {
@@ -755,6 +816,9 @@ class _MainScreenState extends State<_MainScreen>
                   _isAudioPlaying = false;
                   _showUserMessageBubble = false;
                 });
+
+                // Update Unity avatar to listening state
+                _updateUnityAvatarState();
               }
               ToastUtils.showError(context, state.message);
               print('❌ Error state received, reset _isGenerating = false');
@@ -964,18 +1028,50 @@ class _MainScreenState extends State<_MainScreen>
                                   return const SizedBox.shrink();
                                 },
                               ),
-                              // Right side - Profile or Login (hide during recording)
+                              // Right side - Language dropdown, Profile or Login (hide during recording)
                               BlocBuilder<AuthBloc, AuthState>(
                                 builder: (context, state) {
                                   if (state is AuthAuthenticated &&
                                       !_isScreenRecording) {
-                                    return ProfileAvatarWidget(
-                                      onTap: () {
-                                        setState(() {
-                                          _showMenuDrawer = true;
-                                        });
-                                        _animationController.forward();
-                                      },
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Language Selection Button
+                                        GlassButton(
+                                          onTap: () =>
+                                              _showLanguageSelectionDialog(),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.language,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                _selectedLanguage == 'telugu'
+                                                    ? 'Telugu'
+                                                    : 'English',
+                                                style: AppTheme.body(context)
+                                                    .copyWith(
+                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        ProfileAvatarWidget(
+                                          onTap: () {
+                                            setState(() {
+                                              _showMenuDrawer = true;
+                                            });
+                                            _animationController.forward();
+                                          },
+                                        ),
+                                      ],
                                     );
                                   }
                                   if (_isScreenRecording) {
@@ -1372,6 +1468,9 @@ class _MainScreenState extends State<_MainScreen>
       _showFollowUps = false; // Hide follow-ups when sending message
     });
 
+    // Update Unity avatar to thinking state
+    _updateUnityAvatarState();
+
     // Clear input field immediately
     _textController.clear();
 
@@ -1381,6 +1480,7 @@ class _MainScreenState extends State<_MainScreen>
     context.read<ChatBloc>().add(ChatMessageSent(
           message: text,
           threadId: _threadId,
+          language: _selectedLanguage, // Pass selected language
         ));
   }
 
@@ -1401,6 +1501,146 @@ class _MainScreenState extends State<_MainScreen>
   void _removeRecordingIndicator() {
     _recordingIndicatorOverlay?.remove();
     _recordingIndicatorOverlay = null;
+  }
+
+  void _showLanguageSelectionDialog() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 280),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.white.withOpacity(0.1),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.language,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Select Language',
+                            style: AppTheme.body(context).copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Language Options
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 12),
+                      child: Column(
+                        children: [
+                          _buildLanguageOption(
+                            language: 'english',
+                            displayName: 'English',
+                          ),
+                          _buildLanguageOption(
+                            language: 'telugu',
+                            displayName: 'Telugu',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption({
+    required String language,
+    required String displayName,
+  }) {
+    final isSelected = _selectedLanguage == language;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedLanguage = language;
+        });
+        print('🌐 Language changed to: $language');
+        Navigator.of(context).pop();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color:
+                isSelected ? Colors.white.withOpacity(0.3) : Colors.transparent,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              displayName,
+              style: AppTheme.body(context).copyWith(
+                fontSize: 16,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: Colors.white.withOpacity(isSelected ? 1.0 : 0.7),
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: Colors.white.withOpacity(0.9),
+                size: 20,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleScreenRecording() async {

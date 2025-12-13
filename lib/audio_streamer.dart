@@ -14,12 +14,14 @@ class AudioStreamer {
   /// [onAlignmentUpdate] callback receives alignment data WHEN chunks are sent to Unity (synchronized)
   /// [onChunkSent] callback fires when each batch is sent (for subtitle sync)
   /// [onAudioStarted] callback fires when Unity ACTUALLY starts playing audio (for precise subtitle timing)
+  /// [language] can be 'telugu' or 'english' to select appropriate voice
   Future<ConsolidatedAlignment> streamToUnity(
     String text, {
     void Function(AlignmentData)? onAlignmentUpdate,
     void Function()? onChunkSent, // Called when batch is sent to Unity
     void Function()?
         onAudioStarted, // Called when Unity starts playing (from Unity callback)
+    String language = 'telugu',
   }) async {
     final consolidated = ConsolidatedAlignment();
 
@@ -52,8 +54,8 @@ class AudioStreamer {
       final chunkIntervals = <int>[];
 
       // Stream chunks and batch them based on audio duration
-      await for (final audioChunk
-          in elevenLabsService.streamTextToSpeechWithTimestamps(text)) {
+      await for (final audioChunk in elevenLabsService
+          .streamTextToSpeechWithTimestamps(text, language: language)) {
         totalChunks++;
 
         // DIAGNOSTICS: Measure time between chunks

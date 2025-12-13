@@ -12,14 +12,16 @@ abstract class ChatEvent extends Equatable {
 class ChatMessageSent extends ChatEvent {
   final String message;
   final String? threadId;
+  final String language; // 'telugu' or 'english'
 
   const ChatMessageSent({
     required this.message,
     this.threadId,
+    this.language = 'telugu',
   });
 
   @override
-  List<Object?> get props => [message, threadId];
+  List<Object?> get props => [message, threadId, language];
 }
 
 /// Load conversation history
@@ -86,4 +88,3 @@ class ChatMessagePlayedStatusUpdated extends ChatEvent {
   @override
   List<Object?> get props => [messageId, threadId, isPlayed];
 }
-

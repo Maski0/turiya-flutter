@@ -33,7 +33,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     // Get current messages
     List<ChatMessage> currentMessages = [];
     String? currentThreadId = event.threadId;
-    
+
     if (state is ChatLoaded) {
       final loaded = state as ChatLoaded;
       currentMessages = List.from(loaded.messages);
@@ -47,12 +47,12 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       type: 'user',
     );
     currentMessages.add(userMessage);
-    
+
     // Save user message to cache immediately (triggers stream)
     // Also clear old follow-ups from cache
     if (currentThreadId != null) {
       await _cacheService.cacheMessages(
-        currentMessages, 
+        currentMessages,
         currentThreadId,
         followUpQuestions: [], // Clear old follow-ups when sending new message
       );
@@ -73,6 +73,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
         threadId: currentThreadId,
         model: 'claude-sonnet-4-0',
         agentId: 'krsna-agent',
+        language: event.language, // Pass language from event
       );
 
       // Parse response
@@ -80,7 +81,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       final aiData = jsonDecode(aiContent);
       final saiBabaResponse = aiData['response'];
       final followUps = (aiData['follow_ups'] as List?)?.cast<String>() ?? [];
-      
+
       // Debug logging
       print('🔍 Backend response keys: ${aiData.keys.toList()}');
       print('📝 Follow-ups received: $followUps');
@@ -107,13 +108,13 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       // Save to cache (this triggers the stream and updates UI)
       if (currentThreadId != null) {
         await _cacheService.cacheMessages(
-          currentMessages, 
+          currentMessages,
           currentThreadId,
           followUpQuestions: followUps, // Save follow-ups to cache
         );
         await _cacheService.saveThreadId(currentThreadId);
       }
-      
+
       // Update follow-up questions in state (stream handles messages)
       if (state is ChatLoaded) {
         emit((state as ChatLoaded).copyWith(
@@ -124,25 +125,27 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       }
     } catch (e) {
       print('❌ Error sending message: $e');
-      
+
       // Remove the optimistically added user message
       currentMessages.removeLast();
-      
+
       // Get current follow-ups before updating cache
-      final currentFollowUps = state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : <String>[];
-      
+      final currentFollowUps = state is ChatLoaded
+          ? (state as ChatLoaded).followUpQuestions
+          : <String>[];
+
       // Update cache to reflect removal
       if (currentThreadId != null) {
         await _cacheService.cacheMessages(
-          currentMessages, 
+          currentMessages,
           currentThreadId,
           followUpQuestions: currentFollowUps,
         );
       }
-      
+
       // Show error toast
       emit(ChatError(e.toString().replaceAll('Exception: ', '')));
-      
+
       // Restore to ChatLoaded state with pending message after showing error
       await Future.delayed(const Duration(seconds: 2));
       emit(ChatLoaded(
@@ -161,27 +164,29 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     Emitter<ChatState> emit,
   ) async {
     print('📜 ChatHistoryRequested for thread: ${event.threadId}');
-    
+
     // Start watching the thread first (instant cache load)
     print('👁️ Starting to watch thread: ${event.threadId}');
     add(ChatThreadWatchRequested(event.threadId));
-    
+
     // Then fetch fresh data from backend
     try {
       print('🌐 Fetching history from backend for thread: ${event.threadId}');
       final history = await _backendApi.getHistory(event.threadId);
-      
+
       final messages = (history['messages'] as List)
           .map((msg) => ChatMessage.fromJson(msg))
           .toList();
 
       print('✅ Received ${messages.length} messages from backend');
-      
+
       // Get cached follow-ups to preserve them
-      final cachedFollowUps = await _cacheService.getFollowUpQuestions(event.threadId);
-      
+      final cachedFollowUps =
+          await _cacheService.getFollowUpQuestions(event.threadId);
+
       // Save to cache (this will trigger the stream and update UI)
-      await _cacheService.cacheMessages(messages, event.threadId, followUpQuestions: cachedFollowUps);
+      await _cacheService.cacheMessages(messages, event.threadId,
+          followUpQuestions: cachedFollowUps);
       print('💾 Cached ${messages.length} messages');
     } catch (e) {
       // If backend fails, cache will still show (if any)
@@ -199,7 +204,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
     try {
       await _backendApi.deleteHistory(event.threadId);
-      
+
       emit(const ChatLoaded(messages: []));
     } catch (e) {
       emit(ChatError('Failed to delete history: ${e.toString()}'));
@@ -242,37 +247,43 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       threadId: currentThreadId,
     ));
   }
-  
+
   /// Start watching a thread for changes (Observable pattern)
   Future<void> _onThreadWatchRequested(
     ChatThreadWatchRequested event,
     Emitter<ChatState> emit,
   ) async {
     // Load cached follow-up questions once
-    final cachedFollowUps = await _cacheService.getFollowUpQuestions(event.threadId);
+    final cachedFollowUps =
+        await _cacheService.getFollowUpQuestions(event.threadId);
     print('📋 Cached follow-ups loaded: $cachedFollowUps');
     print('📊 Cached follow-ups count: ${cachedFollowUps.length}');
-    
+
     // Use emit.forEach to properly handle the stream
     await emit.forEach<List<ChatMessage>>(
       _cacheService.watchMessages(event.threadId),
       onData: (messages) {
         print('💬 Messages from stream: ${messages.length} messages');
-        print('🔍 Last message type: ${messages.isNotEmpty ? messages.last.type : "none"}');
-        
+        print(
+            '🔍 Last message type: ${messages.isNotEmpty ? messages.last.type : "none"}');
+
         // Return new state whenever cache updates
         // Use cached follow-ups if available, otherwise preserve from state
-        final followUps = cachedFollowUps.isNotEmpty 
-            ? cachedFollowUps 
-            : (state is ChatLoaded ? (state as ChatLoaded).followUpQuestions : <String>[]);
-        
-        print('✅ Final follow-ups to emit: $followUps (count: ${followUps.length})');
-        
+        final followUps = cachedFollowUps.isNotEmpty
+            ? cachedFollowUps
+            : (state is ChatLoaded
+                ? (state as ChatLoaded).followUpQuestions
+                : <String>[]);
+
+        print(
+            '✅ Final follow-ups to emit: $followUps (count: ${followUps.length})');
+
         return ChatLoaded(
           messages: messages,
           threadId: event.threadId,
           followUpQuestions: followUps,
-          isGenerating: state is ChatLoaded ? (state as ChatLoaded).isGenerating : false,
+          isGenerating:
+              state is ChatLoaded ? (state as ChatLoaded).isGenerating : false,
         );
       },
       onError: (error, stackTrace) {
@@ -280,7 +291,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       },
     );
   }
-  
+
   /// Update message played status (for TTS tracking)
   Future<void> _onMessagePlayedStatusUpdated(
     ChatMessagePlayedStatusUpdated event,
@@ -294,4 +305,3 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     );
   }
 }
-
