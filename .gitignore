@@ -92,6 +92,8 @@ unlinked_spec.ds
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
 **/ios/unityLibrary/
+# Except the built framework:
+!ios/unityLibrary/build/Build/Products/Release-iphoneos/UnityFramework.framework/**
 
 
 # macOS
