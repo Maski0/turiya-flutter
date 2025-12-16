@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
@@ -16,18 +18,23 @@ import 'services/cache_service.dart';
 import 'models/cached_message.dart';
 import 'models/alignment_data.dart';
 import 'widgets/glass_button.dart';
-import 'widgets/bottom_input_bar.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/menu_drawer.dart';
 import 'widgets/profile_avatar_widget.dart';
 import 'widgets/recording_indicator.dart';
 import 'widgets/recording_preview_overlay.dart';
+import 'widgets/icons/hamburger_icon.dart';
+import 'widgets/icons/right_arrow_icon.dart';
+import 'widgets/bottom_input_bar.dart';
+import 'widgets/main_menu.dart';
+import 'widgets/star_border.dart';
 import 'services/screen_recording_service.dart';
 import 'blocs/auth/auth_bloc_export.dart';
 import 'blocs/chat/chat_bloc_export.dart';
 import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
+import 'services/background_audio_service.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
@@ -113,6 +120,7 @@ class _MainScreenState extends State<_MainScreen>
   bool _showLoginModal = false;
   bool _showChatSidebar = false;
   bool _showMenuDrawer = false;
+  bool _showMainMenu = false;
   bool _showChip = false; // Hidden by default, shows when chat opens
   bool _isInInitialGracePeriod = false; // First 3s after opening chat
   bool _isRecording = false;
@@ -172,6 +180,17 @@ class _MainScreenState extends State<_MainScreen>
 
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
+
+    // Initialize and start background music
+    _initBackgroundAudio();
+  }
+
+  /// Initialize background audio after first frame renders
+  Future<void> _initBackgroundAudio() async {
+    // Wait for first frame to ensure app is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await BackgroundAudioService().initialize();
+    });
   }
 
   /// Updates Unity avatar state based on current Flutter app state
@@ -860,13 +879,21 @@ class _MainScreenState extends State<_MainScreen>
             // Don't return - continue to next action
           }
 
-          // Priority 2: Close login modal if open
+          // Priority 2: Close main menu if open
+          if (_showMainMenu) {
+            setState(() {
+              _showMainMenu = false;
+            });
+            return;
+          }
+
+          // Priority 3: Close login modal if open
           if (_showLoginModal) {
             _toggleLoginModal();
             return;
           }
 
-          // Priority 3: Close chat sidebar if open
+          // Priority 4: Close chat sidebar if open
           if (_showChatSidebar) {
             setState(() {
               _showChatSidebar = false;
@@ -874,7 +901,7 @@ class _MainScreenState extends State<_MainScreen>
             return;
           }
 
-          // Priority 4: Show exit confirmation dialog
+          // Priority 5: Show exit confirmation dialog
           _showExitConfirmationDialog();
         },
         child: Scaffold(
@@ -951,7 +978,42 @@ class _MainScreenState extends State<_MainScreen>
                   ),
                 ),
 
-                // Top bar with menu and login
+                // Chat Sidebar - renders BEFORE top bar so buttons appear on top
+                if (_showChatSidebar)
+                  Positioned.fill(
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: ChatSidebar(
+                        scrollController: _scrollController,
+                        onClose: () {
+                          _chipAutoHideTimer?.cancel();
+                          _animationController.reverse().then((_) {
+                            setState(() {
+                              _showChatSidebar = false;
+                            });
+                          });
+                        },
+                        onFollowUpTap: (question) {
+                          _textController.text = question;
+                          _sendMessage(question, context);
+                        },
+                        onLoginTap: _toggleLoginModal,
+                        messageController: _textController,
+                        onSendMessage: () {
+                          final text = _textController.text.trim();
+                          if (text.isNotEmpty) {
+                            _sendMessage(text, context);
+                          }
+                        },
+                        isRecording: _isRecording,
+                        isAudioPlaying: _isAudioPlaying,
+                        onMicTap: _toggleListening,
+                        onStopAudio: _stopAudio,
+                      ),
+                    ),
+                  ),
+
+                // Top bar with menu and login - renders AFTER ChatSidebar so buttons appear on top
                 Positioned(
                   top: 0,
                   left: 0,
@@ -965,80 +1027,59 @@ class _MainScreenState extends State<_MainScreen>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Menu button (opens chat) - only when authenticated and not recording
-                              BlocBuilder<AuthBloc, AuthState>(
-                                builder: (context, state) {
-                                  if (state is AuthAuthenticated &&
-                                      !_isScreenRecording) {
-                                    return GestureDetector(
-                                      onTap: () {
-                                        // Toggle chat sidebar
-                                        if (_showChatSidebar) {
-                                          // Cancel timer when closing overlay
-                                          _chipAutoHideTimer?.cancel();
-                                          _animationController
-                                              .reverse()
-                                              .then((_) {
-                                            if (mounted) {
-                                              setState(() {
-                                                _showChatSidebar = false;
-                                              });
-                                            }
-                                          });
-                                        } else {
-                                          setState(() {
-                                            _showChatSidebar = true;
-                                            _showChip = false; // Start hidden
-                                          });
-                                          _animationController.forward();
-                                          // Show chip after overlay starts animating
-                                          Future.delayed(
-                                              const Duration(milliseconds: 100),
-                                              () {
-                                            if (mounted && _showChatSidebar) {
-                                              setState(() {
-                                                _showChip = true;
-                                              });
-                                              _startInitialGracePeriod(); // 3s grace period before scroll behavior
-                                              _startChipAutoHideTimer(); // Start fresh 5s timer
-                                            }
-                                          });
-                                        }
-                                      },
+                              // Top left button - Hamburger menu OR Close button when chat is open
+                              // Hide during screen recording
+                              if (!_isScreenRecording)
+                                GestureDetector(
+                                  onTap: () {
+                                    if (_showChatSidebar) {
+                                      // Close chat sidebar
+                                      _chipAutoHideTimer?.cancel();
+                                      _animationController.reverse().then((_) {
+                                        setState(() {
+                                          _showChatSidebar = false;
+                                        });
+                                      });
+                                    } else {
+                                      // Toggle main menu
+                                      setState(() {
+                                        _showMainMenu = !_showMainMenu;
+                                      });
+                                    }
+                                  },
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 12, sigmaY: 12),
                                       child: Container(
-                                        width: 44,
-                                        height: 44,
+                                        width: 48,
+                                        height: 48,
                                         decoration: BoxDecoration(
+                                          color: const Color(0x1AFFFFFF),
                                           borderRadius:
-                                              BorderRadius.circular(13),
+                                              BorderRadius.circular(16),
                                           border: Border.all(
-                                            color:
-                                                Colors.white.withOpacity(0.32),
-                                            width: 1.2,
+                                            color: const Color(0x33FFFFFF),
+                                            width: 1,
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black
-                                                  .withOpacity(0.18),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
                                         ),
                                         child: Center(
-                                          child: Icon(
-                                            Icons.view_sidebar_outlined,
-                                            color:
-                                                Colors.white.withOpacity(0.95),
-                                            size: 19,
-                                          ),
+                                          // Show close icon when chat is open, hamburger otherwise
+                                          child: _showChatSidebar
+                                              ? const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 24,
+                                                )
+                                              : const HamburgerIcon(size: 24),
                                         ),
                                       ),
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                },
-                              ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                const SizedBox.shrink(),
                               // Right side - Language dropdown, Profile or Login (hide during recording)
                               BlocBuilder<AuthBloc, AuthState>(
                                 builder: (context, state) {
@@ -1088,22 +1129,62 @@ class _MainScreenState extends State<_MainScreen>
                                   if (_isScreenRecording) {
                                     return const SizedBox.shrink();
                                   }
-                                  return GlassButton(
+                                  // Web: auth-glass-btn styling
+                                  // padding: 10px 12px, borderRadius: 16px,
+                                  // background: rgba(255, 255, 255, 0.01),
+                                  // border: 1px solid rgba(255, 255, 255, 0.08), blur: 16px
+                                  return GestureDetector(
                                     onTap: _toggleLoginModal,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.meeting_room,
-                                            color: Colors.white, size: 20),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Login',
-                                          style:
-                                              AppTheme.title(context).copyWith(
-                                            fontWeight: FontWeight.w500,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(
+                                            sigmaX: 16, sigmaY: 16),
+                                        child: Container(
+                                          padding: const EdgeInsets.only(
+                                            left: 18,
+                                            right: 16,
+                                            top: 12,
+                                            bottom: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            // Web: rgba(255, 255, 255, 0.01)
+                                            color: const Color(0x03FFFFFF),
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
+                                              // Web: rgba(255, 255, 255, 0.08)
+                                              color: const Color(0x14FFFFFF),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // Web: RightArrow icon with mr-1 (14x21)
+                                              const RightArrowIcon(
+                                                size: 14,
+                                                color: Colors.white,
+                                              ),
+                                              // Spacing between icon and text
+                                              const SizedBox(width: 8),
+                                              // Web: font-medium text-xl (20px) but using 18px for mobile
+                                              // Use theme: titleLarge (18px)
+                                              Text(
+                                                'Login',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleLarge!
+                                                    .copyWith(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   );
                                 },
@@ -1171,32 +1252,9 @@ class _MainScreenState extends State<_MainScreen>
                   ),
                 ),
 
-                // Chat Sidebar
-                if (_showChatSidebar)
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: ChatSidebar(
-                      scrollController: _scrollController,
-                      onClose: () {
-                        _chipAutoHideTimer
-                            ?.cancel(); // Cancel timer when closing
-                        _animationController.reverse().then((_) {
-                          setState(() {
-                            _showChatSidebar = false;
-                          });
-                        });
-                      },
-                      onFollowUpTap: (question) {
-                        _textController.text = question;
-                        _sendMessage(question, context);
-                      },
-                    ),
-                  ),
-
-                // Bottom input area (always visible, below overlays)
                 Positioned(
-                  left: 0,
-                  right: 0,
+                  left: 10,
+                  right: 10,
                   bottom: keyboardHeight,
                   child: SafeArea(
                     bottom: true,
@@ -1321,19 +1379,154 @@ class _MainScreenState extends State<_MainScreen>
                             return const SizedBox.shrink();
                           },
                         ),
-                        BottomInputBar(
-                          textController: _textController,
-                          focusNode: _textFocusNode,
-                          isGenerating: _isGenerating,
-                          isRecording: _isRecording,
-                          isAudioPlaying: _isAudioPlaying,
-                          onSubmit: (value) => _sendMessage(value, context),
-                          onMicTap: _toggleListening,
+                        // Bottom bar with input and chat button
+                        // Wrapped with AnimatedStarBorder for subtle glow animation
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 32),
+                          child: AnimatedStarBorder(
+                            // Web: color="rgba(255, 255, 255, 0.6)" speed="8s"
+                            color: const Color(0x99FFFFFF),
+                            speed: const Duration(seconds: 8),
+                            child: BottomInputBar(
+                              textController: _textController,
+                              focusNode: _textFocusNode,
+                              isGenerating: _isGenerating,
+                              isRecording: _isRecording,
+                              isAudioPlaying: _isAudioPlaying,
+                              onSubmit: (text) => _sendMessage(text, context),
+                              onMicTap: _toggleListening,
+                              onStopAudio: _stopAudio,
+                              showChatButton: !_showChatSidebar,
+                              onChatButtonTap: () {
+                                setState(() {
+                                  _showChatSidebar = true;
+                                  _showChip = false; // Start hidden
+                                });
+                                _animationController.forward();
+                                // Show chip after overlay starts animating
+                                Future.delayed(
+                                    const Duration(milliseconds: 100), () {
+                                  if (mounted && _showChatSidebar) {
+                                    setState(() {
+                                      _showChip = true;
+                                    });
+                                    _startChipAutoHideTimer();
+                                  }
+                                });
+                              },
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
+
+                // Bottom center - Pondering or Disclaimer
+                if (!_showChatSidebar)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: SafeArea(
+                      bottom: true,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Builder(
+                          builder: (context) {
+                            // Show "Pondering..." when generating or playing audio
+                            if (_isGenerating || _isAudioPlaying) {
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Stop button
+                                  GestureDetector(
+                                    onTap: _stopAudio,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0x1AFFFFFF),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: const Color(0x33FFFFFF),
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.stop_rounded,
+                                            color: Colors.white,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _isAudioPlaying
+                                                ? 'Stop'
+                                                : 'Pondering...',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium!
+                                                .copyWith(
+                                                  color: Colors.white,
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }
+
+                            // Show disclaimer when not generating
+                            final baseStyle =
+                                Theme.of(context).textTheme.bodySmall!.copyWith(
+                                      color: const Color(0x80FFFFFF),
+                                      height: 1.25,
+                                    );
+                            return RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: baseStyle,
+                                children: [
+                                  const TextSpan(
+                                    text: 'Turiya',
+                                    style:
+                                        TextStyle(fontStyle: FontStyle.italic),
+                                  ),
+                                  const TextSpan(text: ' can make mistakes. '),
+                                  TextSpan(
+                                    text: 'Check disclaimer.',
+                                    style: const TextStyle(
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: Color(0x80FFFFFF),
+                                    ),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () async {
+                                        final url = Uri.parse(
+                                          'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
+                                        );
+                                        if (await canLaunchUrl(url)) {
+                                          await launchUrl(url,
+                                              mode: LaunchMode
+                                                  .externalApplication);
+                                        }
+                                      },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Menu Drawer (Profile settings) - renders on top of input bar
                 if (_showMenuDrawer)
@@ -1364,6 +1557,16 @@ class _MainScreenState extends State<_MainScreen>
                       },
                     ),
                   ),
+
+                // Main Menu (About, FAQs, Blog, Contact) - top layer
+                MainMenu(
+                  isOpen: _showMainMenu,
+                  onClose: () {
+                    setState(() {
+                      _showMainMenu = false;
+                    });
+                  },
+                ),
               ], // Close Stack children
             ), // Close Stack
           ), // Close GestureDetector (Scaffold body)
@@ -1450,6 +1653,25 @@ class _MainScreenState extends State<_MainScreen>
       _stopListening();
     } else {
       _startListening();
+    }
+  }
+
+  void _stopAudio() {
+    // Stop audio playback immediately
+    try {
+      sendToUnity("Flutter", "OnAudioChunk", "END");
+      print('⏸️ User stopped audio playback');
+    } catch (e) {
+      print('⚠️ Error sending END signal to Unity: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _isAudioPlaying = false;
+        _currentAlignment = null;
+        _isGenerating = false;
+      });
+      _updateUnityAvatarState();
     }
   }
 

@@ -49,6 +49,18 @@ dependencies:
   # Liquid Glass Effect
   liquid_glass_renderer: ^0.2.0-dev.4
 
+  # URL Launcher (for disclaimer link)
+  url_launcher: ^6.3.1
+
+  # SVG support
+  flutter_svg: ^2.0.10+1
+
+  # WebView for in-app browser
+  webview_flutter: ^4.10.0
+
+  # Background audio player
+  audioplayers: ^6.1.0
+
 dev_dependencies:
   integration_test:
     sdk: flutter
@@ -67,6 +79,8 @@ flutter:
   assets:
     - .env
     - assets/images/
+    - assets/icons/
+    - assets/audio/
 
   fonts:
     - family: Alegreya

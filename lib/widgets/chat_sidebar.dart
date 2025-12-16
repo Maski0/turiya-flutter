@@ -10,12 +10,26 @@ class ChatSidebar extends StatefulWidget {
   final ScrollController scrollController;
   final VoidCallback onClose;
   final Function(String) onFollowUpTap;
+  final VoidCallback onLoginTap;
+  final TextEditingController messageController;
+  final VoidCallback onSendMessage;
+  final bool isRecording;
+  final bool isAudioPlaying;
+  final VoidCallback onMicTap;
+  final VoidCallback? onStopAudio;
 
   const ChatSidebar({
     super.key,
     required this.scrollController,
     required this.onClose,
     required this.onFollowUpTap,
+    required this.onLoginTap,
+    required this.messageController,
+    required this.onSendMessage,
+    required this.isRecording,
+    required this.isAudioPlaying,
+    required this.onMicTap,
+    this.onStopAudio,
   });
 
   @override
@@ -23,285 +37,254 @@ class ChatSidebar extends StatefulWidget {
 }
 
 class _ChatSidebarState extends State<ChatSidebar> {
-  // No need to create or dispose scroll controller - it's passed from parent
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    return DateFormat('MMMM d, yyyy').format(now).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black.withOpacity(0.35),
-              Colors.black.withOpacity(0.28),
-            ],
+    return ClipRect(
+      child: BackdropFilter(
+        // High blur for liquid glass refraction effect
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          decoration: const BoxDecoration(
+            // Very subtle tint for glass effect
+            color: Color(0x08FFFFFF),
           ),
-        ),
-        child: SafeArea(
-          bottom:
-              false, // Don't apply SafeArea to bottom (let input stay visible)
-          child: Column(
-            children: [
-              // Top bar with back button
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withOpacity(0.12),
-                      width: 0.5,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Top bar - Date only (close and login handled by main screen buttons above)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _getFormattedDate(),
+                      style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                            color: Colors.white,
+                            letterSpacing: 2.0,
+                            fontWeight: FontWeight.w400,
+                          ),
                     ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.arrow_back,
-                          color: Colors.white.withOpacity(0.95)),
-                      onPressed: widget.onClose,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(),
-                      iconSize: 22,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Chat with Sathya Sai Baba',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Messages list
-              Expanded(
-                child: BlocBuilder<ChatBloc, ChatState>(
-                  // Only rebuild when messages actually change (prevent jitter from unrelated state changes)
-                  buildWhen: (previous, current) {
-                    if (previous is ChatLoaded && current is ChatLoaded) {
-                      return previous.messages != current.messages ||
-                          previous.isGenerating != current.isGenerating;
-                    }
-                    return true;
-                  },
-                  builder: (context, state) {
-                    // Show empty state for initial or empty loaded state
-                    if (state is ChatInitial ||
-                        (state is ChatLoaded && state.messages.isEmpty)) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.forum_outlined,
-                              size: 56,
-                              color: Colors.white.withOpacity(0.2),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'No messages yet',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineLarge
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w300,
-                                  ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Ask Sathya Sai Baba a question',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(
-                                    color: Colors.white.withOpacity(0.5),
-                                  ),
+                // Messages list
+                Expanded(
+                  child: BlocBuilder<ChatBloc, ChatState>(
+                    // Only rebuild when messages actually change (prevent jitter from unrelated state changes)
+                    buildWhen: (previous, current) {
+                      if (previous is ChatLoaded && current is ChatLoaded) {
+                        return previous.messages != current.messages ||
+                            previous.isGenerating != current.isGenerating;
+                      }
+                      return true;
+                    },
+                    builder: (context, state) {
+                      // Hide empty state - just show empty space
+                      if (state is ChatInitial ||
+                          (state is ChatLoaded && state.messages.isEmpty)) {
+                        return const SizedBox.shrink();
+                      }
+
+                      if (state is ChatLoaded) {
+                        final messages = state.messages;
+                        final itemCount =
+                            messages.length + (state.isGenerating ? 1 : 0);
+
+                        return CustomScrollView(
+                          controller: widget.scrollController,
+                          reverse:
+                              true, // Start from bottom like messaging apps
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          slivers: [
+                            SliverPadding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(14, 8, 14, 110),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    // Show typing indicator as first item (bottom of reversed list)
+                                    if (index == 0 && state.isGenerating) {
+                                      return const _TypingIndicator();
+                                    }
+
+                                    // Get actual message index (accounting for reversed list and typing indicator)
+                                    final messageIndex = messages.length -
+                                        index -
+                                        (state.isGenerating ? 0 : 1);
+                                    final message = messages[messageIndex];
+
+                                    // Check if we need to show date header
+                                    final isLastInReversedList = index ==
+                                        messages.length -
+                                            (state.isGenerating ? 0 : 1);
+                                    final showDate = isLastInReversedList ||
+                                        (messageIndex < messages.length - 1);
+
+                                    return _MessageItem(
+                                      key: ValueKey(message.id),
+                                      message: message,
+                                      showDate: showDate,
+                                      previousMessage: !isLastInReversedList &&
+                                              messageIndex < messages.length - 1
+                                          ? messages[messageIndex + 1]
+                                          : null,
+                                    );
+                                  },
+                                  childCount: itemCount,
+                                  addAutomaticKeepAlives: true,
+                                  addRepaintBoundaries: true,
+                                ),
+                              ),
                             ),
                           ],
-                        ),
-                      );
-                    }
+                        );
+                      }
 
-                    if (state is ChatLoaded) {
-                      final messages = state.messages;
-                      final itemCount =
-                          messages.length + (state.isGenerating ? 1 : 0);
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
 
-                      return CustomScrollView(
-                        controller: widget.scrollController,
-                        reverse: true, // Start from bottom like messaging apps
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
-                        slivers: [
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  // Show typing indicator as first item (bottom of reversed list)
-                                  if (index == 0 && state.isGenerating) {
-                                    return const _TypingIndicator();
-                                  }
-
-                                  // Get actual message index (accounting for reversed list and typing indicator)
-                                  final messageIndex = messages.length -
-                                      index -
-                                      (state.isGenerating ? 0 : 1);
-                                  final message = messages[messageIndex];
-
-                                  // Check if we need to show date header
-                                  final isLastInReversedList = index ==
-                                      messages.length -
-                                          (state.isGenerating ? 0 : 1);
-                                  final showDate = isLastInReversedList ||
-                                      (messageIndex < messages.length - 1);
-
-                                  return _MessageItem(
-                                    key: ValueKey(message.id),
-                                    message: message,
-                                    showDate: showDate,
-                                    previousMessage: !isLastInReversedList &&
-                                            messageIndex < messages.length - 1
-                                        ? messages[messageIndex + 1]
-                                        : null,
-                                  );
-                                },
-                                childCount: itemCount,
-                                addAutomaticKeepAlives: true,
-                                addRepaintBoundaries: true,
+                // Follow-up questions
+                BlocBuilder<ChatBloc, ChatState>(
+                  builder: (context, state) {
+                    if (state is ChatLoaded &&
+                        state.followUpQuestions.isNotEmpty) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Divider above follow-ups
+                          Container(
+                            height: 0.5,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0),
+                                  Colors.white.withOpacity(0.15),
+                                  Colors.white.withOpacity(0),
+                                ],
                               ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 85),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Keep exploring...',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white.withOpacity(0.55),
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                ),
+                                const SizedBox(height: 14),
+                                // Use ListView.builder for memory efficiency
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: state.followUpQuestions.length,
+                                  itemBuilder: (context, index) {
+                                    final question =
+                                        state.followUpQuestions[index];
+                                    final isLast = index ==
+                                        state.followUpQuestions.length - 1;
+
+                                    return Column(
+                                      children: [
+                                        InkWell(
+                                          onTap: () {
+                                            widget.onFollowUpTap(question);
+                                            widget.onClose();
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          top: 2),
+                                                  child: Icon(
+                                                    Icons
+                                                        .subdirectory_arrow_right,
+                                                    size: 20,
+                                                    color: Colors.white
+                                                        .withOpacity(0.7),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Text(
+                                                    question,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.copyWith(
+                                                          color: Colors.white,
+                                                          height: 1.4,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        // Simple divider
+                                        if (!isLast)
+                                          Container(
+                                            height: 0.5,
+                                            color:
+                                                Colors.white.withOpacity(0.12),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       );
                     }
-
                     return const SizedBox.shrink();
                   },
                 ),
-              ),
 
-              // Follow-up questions
-              BlocBuilder<ChatBloc, ChatState>(
-                builder: (context, state) {
-                  if (state is ChatLoaded &&
-                      state.followUpQuestions.isNotEmpty) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Divider above follow-ups
-                        Container(
-                          height: 0.5,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.white.withOpacity(0),
-                                Colors.white.withOpacity(0.15),
-                                Colors.white.withOpacity(0),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 85),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Keep exploring...',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Colors.white.withOpacity(0.55),
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                              ),
-                              const SizedBox(height: 14),
-                              // Use ListView.builder for memory efficiency
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: state.followUpQuestions.length,
-                                itemBuilder: (context, index) {
-                                  final question =
-                                      state.followUpQuestions[index];
-                                  final isLast = index ==
-                                      state.followUpQuestions.length - 1;
-
-                                  return Column(
-                                    children: [
-                                      InkWell(
-                                        onTap: () {
-                                          widget.onFollowUpTap(question);
-                                          widget.onClose();
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 8),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 2),
-                                                child: Icon(
-                                                  Icons
-                                                      .subdirectory_arrow_right,
-                                                  size: 20,
-                                                  color: Colors.white
-                                                      .withOpacity(0.7),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  question,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.copyWith(
-                                                        color: Colors.white,
-                                                        height: 1.4,
-                                                      ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      // Simple divider
-                                      if (!isLast)
-                                        Container(
-                                          height: 0.5,
-                                          color: Colors.white.withOpacity(0.12),
-                                        ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
+                // Divider above input bar
+                Container(
+                  height: 0.5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withOpacity(0),
+                        Colors.white.withOpacity(0.2),
+                        Colors.white.withOpacity(0),
                       ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-            ],
+                    ),
+                  ),
+                ),
+
+                // Bottom padding to make room for the main input bar overlay
+                const SizedBox(height: 100),
+              ],
+            ),
           ),
         ),
       ),

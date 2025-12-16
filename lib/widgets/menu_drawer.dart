@@ -1,7 +1,5 @@
 import 'dart:ui';
-import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 import '../blocs/credits/credits_bloc.dart';

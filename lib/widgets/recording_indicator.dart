@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// A blinking glowing red dot that appears at the top center of the screen during recording

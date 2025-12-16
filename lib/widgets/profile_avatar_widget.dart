@@ -40,88 +40,88 @@ class ProfileAvatarWidget extends StatelessWidget {
                 }
               }
 
-              return SizedBox(
-                width: 44,
-                height: 44,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Main profile circle
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: avatarUrl != null
-                            ? Image.network(
-                                avatarUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    _buildDefaultAvatar(
-                                        user.email ?? 'U', context),
-                              )
-                            : _buildDefaultAvatar(user.email ?? 'U', context),
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0x1AFFFFFF),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0x33FFFFFF),
+                        width: 1,
                       ),
                     ),
-                    // Credits badge (bottom right)
-                    if (creditsState is CreditsLoaded)
-                      Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: Container(
-                          constraints: const BoxConstraints(minWidth: 18),
-                          height: 18,
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          decoration: BoxDecoration(
-                            color: backgroundColor,
-                            shape: displayText == '★'
-                                ? BoxShape.circle
-                                : BoxShape.rectangle,
-                            borderRadius: displayText == '★'
-                                ? null
-                                : BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 1.2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Profile image centered
+                        Center(
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.4),
+                                width: 1,
                               ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Text(
-                              displayText,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontSize: displayText == '★' ? 10 : 9,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.0,
-                                  ),
+                            ),
+                            child: ClipOval(
+                              child: avatarUrl != null
+                                  ? Image.network(
+                                      avatarUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              _buildDefaultAvatar(
+                                                  user.email ?? 'U', context),
+                                    )
+                                  : _buildDefaultAvatar(
+                                      user.email ?? 'U', context),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                        // Credits badge (bottom right)
+                        if (creditsState is CreditsLoaded)
+                          Positioned(
+                            right: 2,
+                            bottom: 2,
+                            child: Container(
+                              constraints: const BoxConstraints(minWidth: 16),
+                              height: 16,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                color: backgroundColor,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.8),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  displayText,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontSize: displayText == '★' ? 9 : 8,
+                                        fontWeight: FontWeight.bold,
+                                        height: 1.0,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             },

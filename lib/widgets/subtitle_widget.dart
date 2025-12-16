@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../theme/app_theme.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/alignment_data.dart';
