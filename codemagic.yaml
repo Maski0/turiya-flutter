@@ -18,6 +18,12 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Create .env file from environment variables
+        script: |
+          echo "SUPABASE_URL=$SUPABASE_URL" > .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
+          echo "BACKEND_URL=$BACKEND_URL" >> .env
+          echo "✅ .env file created"
       - name: Set up code signing settings on Xcode project
         script: |
           xcode-project use-profiles
