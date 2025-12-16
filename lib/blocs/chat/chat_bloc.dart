@@ -83,9 +83,12 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       final followUps = (aiData['follow_ups'] as List?)?.cast<String>() ?? [];
 
       // Debug logging
+      print('═══════════════════════════════════════════════');
+      print('✅ MESSAGE SENT SUCCESSFULLY');
       print('🔍 Backend response keys: ${aiData.keys.toList()}');
       print('📝 Follow-ups received: $followUps');
       print('📊 Follow-ups count: ${followUps.length}');
+      print('═══════════════════════════════════════════════');
 
       // Store thread ID if new
       final isNewThread = currentThreadId == null;
@@ -124,7 +127,10 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
         ));
       }
     } catch (e) {
-      print('❌ Error sending message: $e');
+      print('═════════════════════════════════════════');
+      print('🚨🚨🚨 CRITICAL ERROR SENDING MESSAGE 🚨🚨🚨');
+      print('❌ Error: $e');
+      print('═════════════════════════════════════════');
 
       // Remove the optimistically added user message
       currentMessages.removeLast();
@@ -253,35 +259,45 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     ChatThreadWatchRequested event,
     Emitter<ChatState> emit,
   ) async {
-    // Load cached follow-up questions once
-    final cachedFollowUps =
+    // Load follow-ups from cache once at the start for initial load
+    final initialFollowUps =
         await _cacheService.getFollowUpQuestions(event.threadId);
-    print('📋 Cached follow-ups loaded: $cachedFollowUps');
-    print('📊 Cached follow-ups count: ${cachedFollowUps.length}');
+    print('═══════════════════════════════════════════════');
+    print('📋 INITIAL FOLLOW-UPS LOADED');
+    print('Follow-ups: $initialFollowUps');
+    print('Count: ${initialFollowUps.length}');
+    print('═══════════════════════════════════════════════');
 
-    // Use emit.forEach to properly handle the stream
-    await emit.forEach<List<ChatMessage>>(
-      _cacheService.watchMessages(event.threadId),
+    // Keep track of current follow-ups
+    List<String> currentFollowUps = initialFollowUps;
+
+    // Create a combined stream that emits both messages and follow-ups together
+    final messagesStream = _cacheService.watchMessages(event.threadId);
+
+    await emit.forEach(
+      messagesStream,
       onData: (messages) {
         print('💬 Messages from stream: ${messages.length} messages');
         print(
             '🔍 Last message type: ${messages.isNotEmpty ? messages.last.type : "none"}');
 
-        // Return new state whenever cache updates
-        // Use cached follow-ups if available, otherwise preserve from state
-        final followUps = cachedFollowUps.isNotEmpty
-            ? cachedFollowUps
-            : (state is ChatLoaded
-                ? (state as ChatLoaded).followUpQuestions
-                : <String>[]);
+        // Update current follow-ups from state if available (set by _onMessageSent)
+        // Otherwise use the current tracked value
+        if (state is ChatLoaded &&
+            (state as ChatLoaded).followUpQuestions.isNotEmpty) {
+          currentFollowUps = (state as ChatLoaded).followUpQuestions;
+        }
 
-        print(
-            '✅ Final follow-ups to emit: $followUps (count: ${followUps.length})');
+        print('═══════════════════════════════════════════════');
+        print('📋 EMITTING FOLLOW-UPS TO UI');
+        print('Follow-ups: $currentFollowUps');
+        print('Count: ${currentFollowUps.length}');
+        print('═══════════════════════════════════════════════');
 
         return ChatLoaded(
           messages: messages,
           threadId: event.threadId,
-          followUpQuestions: followUps,
+          followUpQuestions: currentFollowUps,
           isGenerating:
               state is ChatLoaded ? (state as ChatLoaded).isGenerating : false,
         );

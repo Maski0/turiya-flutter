@@ -172,9 +172,6 @@ class _MainScreenState extends State<_MainScreen>
 
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
-
-    // Set initial Unity avatar state to listening
-    _updateUnityAvatarState();
   }
 
   /// Updates Unity avatar state based on current Flutter app state
@@ -193,10 +190,12 @@ class _MainScreenState extends State<_MainScreen>
     }
 
     try {
+      // Check if Unity is loaded before sending messages
       sendToUnity("Flutter", "AvatarState", state);
       print('🎭 Unity avatar state changed to: $state');
     } catch (e) {
-      print('⚠️ Failed to update Unity avatar state: $e');
+      // Unity not loaded yet, ignore silently
+      // This is normal during app startup
     }
   }
 
@@ -735,9 +734,13 @@ class _MainScreenState extends State<_MainScreen>
                       // Update Unity avatar to listening state
                       _updateUnityAvatarState();
 
-                      sendToUnity("Flutter", "OnAudioChunk", "END");
-                      print(
-                          '🏁 END signal sent to Unity (audio playback complete)');
+                      try {
+                        sendToUnity("Flutter", "OnAudioChunk", "END");
+                        print(
+                            '🏁 END signal sent to Unity (audio playback complete)');
+                      } catch (e) {
+                        // Unity not available, ignore
+                      }
 
                       // Fade out user message bubble
                       if (_showUserMessageBubble) {
@@ -769,8 +772,12 @@ class _MainScreenState extends State<_MainScreen>
                     _currentlyPlayingMessageId = null;
 
                     // Send END signal to Unity to clean up state
-                    sendToUnity("Flutter", "OnAudioChunk", "END");
-                    print('🏁 END signal sent to Unity (error cleanup)');
+                    try {
+                      sendToUnity("Flutter", "OnAudioChunk", "END");
+                      print('🏁 END signal sent to Unity (error cleanup)');
+                    } catch (e) {
+                      // Unity not available, ignore
+                    }
 
                     // Hide subtitles immediately on error
                     if (mounted) {
@@ -806,8 +813,12 @@ class _MainScreenState extends State<_MainScreen>
               }
             } else if (state is ChatError) {
               // Send END signal to Unity to clean up state
-              sendToUnity("Flutter", "OnAudioChunk", "END");
-              print('🏁 END signal sent to Unity (ChatError cleanup)');
+              try {
+                sendToUnity("Flutter", "OnAudioChunk", "END");
+                print('🏁 END signal sent to Unity (ChatError cleanup)');
+              } catch (e) {
+                // Unity not available, ignore
+              }
 
               // Handle error and reset generating flag
               if (mounted) {
