@@ -68,20 +68,59 @@ class _MenuDrawerState extends State<MenuDrawer> {
     ];
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+      filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black.withOpacity(0.32),
-              Colors.black.withOpacity(0.25),
+              Colors.black.withOpacity(0.4),
+              Colors.black.withOpacity(0.35),
             ],
           ),
         ),
         child: Stack(
           children: [
+            // Close button at top left - matches hamburger menu position
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: GestureDetector(
+                    onTap: widget.onClose,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0x03FFFFFF),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0x14FFFFFF),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             // Menu options centered
             SafeArea(
               bottom: false,
@@ -285,53 +324,6 @@ class _MenuDrawerState extends State<MenuDrawer> {
                         );
                       }).toList(),
                     ],
-                  ),
-                ),
-              ),
-            ),
-            // Close menu chip fixed at bottom
-            Positioned(
-              bottom: 60,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onTap: widget.onClose,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withOpacity(0.18),
-                          Colors.white.withOpacity(0.10),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.28),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.white.withOpacity(0.85),
-                          size: 19,
-                        ),
-                        const SizedBox(width: 7),
-                        Text(
-                          'Close Menu',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.white.withOpacity(0.92),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),

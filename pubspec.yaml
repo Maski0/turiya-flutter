@@ -4,7 +4,7 @@ description: Turiya - AI spiritual companion app
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
@@ -45,9 +45,6 @@ dependencies:
   flutter_sound: ^9.16.3
   share_plus: ^10.1.2
   video_player: ^2.9.2
-
-  # Liquid Glass Effect
-  liquid_glass_renderer: ^0.2.0-dev.4
 
   # URL Launcher (for disclaimer link)
   url_launcher: ^6.3.1

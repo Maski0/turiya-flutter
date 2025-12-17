@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/chat/chat_bloc_export.dart';
 import 'package:intl/intl.dart';
 import '../utils/toast_utils.dart';
+import 'icons/copy_icon.dart';
 
 class ChatSidebar extends StatefulWidget {
   final ScrollController scrollController;
@@ -44,469 +45,274 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        // High blur for liquid glass refraction effect
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-        child: Container(
-          decoration: const BoxDecoration(
-            // Very subtle tint for glass effect
-            color: Color(0x08FFFFFF),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                // Top bar - Date only (close and login handled by main screen buttons above)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _getFormattedDate(),
-                      style: Theme.of(context).textTheme.labelMedium!.copyWith(
-                            color: Colors.white,
-                            letterSpacing: 2.0,
-                            fontWeight: FontWeight.w400,
-                          ),
-                    ),
-                  ),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0x03FFFFFF), // Web: rgba(255, 255, 255, 0.01)
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Top spacing to start below the close button
+            const SizedBox(height: 70),
+
+            // Date header - Web: 16px, 500 weight, white/70
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20, top: 8),
+              child: Center(
+                child: Text(
+                  _getFormattedDate(),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white.withOpacity(0.7),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 16,
+                        letterSpacing: 0.5,
+                      ),
                 ),
-
-                // Messages list
-                Expanded(
-                  child: BlocBuilder<ChatBloc, ChatState>(
-                    // Only rebuild when messages actually change (prevent jitter from unrelated state changes)
-                    buildWhen: (previous, current) {
-                      if (previous is ChatLoaded && current is ChatLoaded) {
-                        return previous.messages != current.messages ||
-                            previous.isGenerating != current.isGenerating;
-                      }
-                      return true;
-                    },
-                    builder: (context, state) {
-                      // Hide empty state - just show empty space
-                      if (state is ChatInitial ||
-                          (state is ChatLoaded && state.messages.isEmpty)) {
-                        return const SizedBox.shrink();
-                      }
-
-                      if (state is ChatLoaded) {
-                        final messages = state.messages;
-                        final itemCount =
-                            messages.length + (state.isGenerating ? 1 : 0);
-
-                        return CustomScrollView(
-                          controller: widget.scrollController,
-                          reverse:
-                              true, // Start from bottom like messaging apps
-                          physics: const BouncingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics(),
-                          ),
-                          slivers: [
-                            SliverPadding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(14, 8, 14, 110),
-                              sliver: SliverList(
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, index) {
-                                    // Show typing indicator as first item (bottom of reversed list)
-                                    if (index == 0 && state.isGenerating) {
-                                      return const _TypingIndicator();
-                                    }
-
-                                    // Get actual message index (accounting for reversed list and typing indicator)
-                                    final messageIndex = messages.length -
-                                        index -
-                                        (state.isGenerating ? 0 : 1);
-                                    final message = messages[messageIndex];
-
-                                    // Check if we need to show date header
-                                    final isLastInReversedList = index ==
-                                        messages.length -
-                                            (state.isGenerating ? 0 : 1);
-                                    final showDate = isLastInReversedList ||
-                                        (messageIndex < messages.length - 1);
-
-                                    return _MessageItem(
-                                      key: ValueKey(message.id),
-                                      message: message,
-                                      showDate: showDate,
-                                      previousMessage: !isLastInReversedList &&
-                                              messageIndex < messages.length - 1
-                                          ? messages[messageIndex + 1]
-                                          : null,
-                                    );
-                                  },
-                                  childCount: itemCount,
-                                  addAutomaticKeepAlives: true,
-                                  addRepaintBoundaries: true,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-
-                // Follow-up questions
-                BlocBuilder<ChatBloc, ChatState>(
-                  builder: (context, state) {
-                    if (state is ChatLoaded &&
-                        state.followUpQuestions.isNotEmpty) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Divider above follow-ups
-                          Container(
-                            height: 0.5,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.white.withOpacity(0),
-                                  Colors.white.withOpacity(0.15),
-                                  Colors.white.withOpacity(0),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 85),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Keep exploring...',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: Colors.white.withOpacity(0.55),
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                ),
-                                const SizedBox(height: 14),
-                                // Use ListView.builder for memory efficiency
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: state.followUpQuestions.length,
-                                  itemBuilder: (context, index) {
-                                    final question =
-                                        state.followUpQuestions[index];
-                                    final isLast = index ==
-                                        state.followUpQuestions.length - 1;
-
-                                    return Column(
-                                      children: [
-                                        InkWell(
-                                          onTap: () {
-                                            widget.onFollowUpTap(question);
-                                            widget.onClose();
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          top: 2),
-                                                  child: Icon(
-                                                    Icons
-                                                        .subdirectory_arrow_right,
-                                                    size: 20,
-                                                    color: Colors.white
-                                                        .withOpacity(0.7),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Text(
-                                                    question,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodyLarge
-                                                        ?.copyWith(
-                                                          color: Colors.white,
-                                                          height: 1.4,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        // Simple divider
-                                        if (!isLast)
-                                          Container(
-                                            height: 0.5,
-                                            color:
-                                                Colors.white.withOpacity(0.12),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-
-                // Divider above input bar
-                Container(
-                  height: 0.5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withOpacity(0),
-                        Colors.white.withOpacity(0.2),
-                        Colors.white.withOpacity(0),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Bottom padding to make room for the main input bar overlay
-                const SizedBox(height: 100),
-              ],
+              ),
             ),
-          ),
+
+            // Messages list
+            Expanded(
+              child: BlocBuilder<ChatBloc, ChatState>(
+                buildWhen: (previous, current) {
+                  if (previous is ChatLoaded && current is ChatLoaded) {
+                    return previous.messages != current.messages ||
+                        previous.isGenerating != current.isGenerating;
+                  }
+                  return true;
+                },
+                builder: (context, state) {
+                  if (state is ChatInitial ||
+                      (state is ChatLoaded && state.messages.isEmpty)) {
+                    return const SizedBox.shrink();
+                  }
+
+                  if (state is ChatLoaded) {
+                    final messages = state.messages;
+                    final itemCount =
+                        messages.length + (state.isGenerating ? 1 : 0);
+
+                    return ListView.builder(
+                      controller: widget.scrollController,
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(0, 8, 0, 80),
+                      itemCount: itemCount,
+                      itemBuilder: (context, index) {
+                        // Show typing indicator as first item (bottom of reversed list)
+                        if (index == 0 && state.isGenerating) {
+                          return const _TypingIndicator();
+                        }
+
+                        final messageIndex = messages.length -
+                            index -
+                            (state.isGenerating ? 0 : 1);
+                        final message = messages[messageIndex];
+
+                        return _MessageItem(
+                          key: ValueKey(message.id),
+                          message: message,
+                        );
+                      },
+                    );
+                  }
+
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+
+            // Bottom padding for input bar
+            const SizedBox(height: 70),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Message item widget (isolated for better scroll performance)
-class _MessageItem extends StatefulWidget {
+/// Message item widget matching web ChatWindow exactly
+class _MessageItem extends StatelessWidget {
   final ChatMessage message;
-  final bool showDate;
-  final ChatMessage? previousMessage;
 
-  const _MessageItem({
-    super.key,
-    required this.message,
-    required this.showDate,
-    this.previousMessage,
-  });
-
-  @override
-  State<_MessageItem> createState() => _MessageItemState();
-}
-
-class _MessageItemState extends State<_MessageItem>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive =>
-      true; // Keep widget alive to prevent rebuilds during scroll
-
-  // Cache expensive calculations
-  late final DateTime messageTime;
-  late final bool isUser;
-  late final String formattedDate;
-  late final String formattedTime;
-  late final bool shouldShowDate;
-
-  @override
-  void initState() {
-    super.initState();
-    // Pre-calculate all expensive operations once
-    isUser = widget.message.type == 'user';
-    messageTime =
-        DateTime.fromMillisecondsSinceEpoch(int.parse(widget.message.id));
-    formattedDate =
-        DateFormat('MMMM d, yyyy').format(messageTime).toUpperCase();
-    formattedTime = DateFormat('h:mm a').format(messageTime);
-
-    shouldShowDate = widget.showDate &&
-        (widget.previousMessage == null ||
-            !_isSameDay(
-                messageTime,
-                DateTime.fromMillisecondsSinceEpoch(
-                    int.parse(widget.previousMessage!.id))));
-  }
+  const _MessageItem({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    final isUser = message.type == 'user';
+    final messageTime = DateTime.fromMillisecondsSinceEpoch(
+      int.parse(message.id),
+    );
+    final formattedTime = DateFormat('h:mm a').format(messageTime);
 
+    // Web: gap 16px between messages
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: isUser
+          ? _buildUserMessage(context)
+          : _buildAIMessage(context, formattedTime),
+    );
+  }
+
+  Widget _buildUserMessage(BuildContext context) {
+    // Web: rounded-2xl rounded-tr-md, background #FFFFFF14, border 1px solid #FFFFFF14
+    // padding 16px, max-width 80%
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.8,
+          ),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0x14FFFFFF), // #FFFFFF14
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(6), // rounded-tr-md
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(16),
+            ),
+            border: Border.all(
+              color: const Color(0x14FFFFFF), // #FFFFFF14
+              width: 1,
+            ),
+          ),
+          child: Text(
+            message.content,
+            style: const TextStyle(
+              fontFamily: 'Alegreya',
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+              height: 1.25, // line-height 125%
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAIMessage(BuildContext context, String formattedTime) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Date header
-        if (shouldShowDate)
-          Padding(
-            padding: const EdgeInsets.only(top: 16, bottom: 10),
-            child: Center(
-              child: Text(
-                formattedDate,
-                style: _dateHeaderStyle(context),
-              ),
-            ),
-          ),
-
-        // Message content
-        if (isUser)
-          // User message - simple bubble on right
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.72,
-              ),
-              margin: const EdgeInsets.only(top: 14, bottom: 5),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 15,
-                vertical: 10,
-              ),
-              decoration: _userBubbleDecoration,
-              child: Text(
-                widget.message.content,
-                style: _messageTextStyle(context),
-              ),
-            ),
-          )
-        else
-          // Sai Baba's message - no bubble
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'Sathya Sai Baba',
-                    style: _speakerNameStyle(context),
-                  ),
-                ),
-                Text(
-                  widget.message.content,
-                  style: _messageTextStyle(context),
-                ),
-              ],
-            ),
-          ),
-
-        // Time and action buttons
+        // Speaker name - Web: 14px, 500 weight, white/60, paddingLeft 16px
         Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 8),
+          padding: const EdgeInsets.only(left: 16, bottom: 4),
+          child: Text(
+            'Sathya Sai Baba',
+            style: TextStyle(
+              fontFamily: 'Alegreya',
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.6),
+              height: 1.25,
+            ),
+          ),
+        ),
+
+        // Message content - Web: padding 16px, 18px, line-height 140%
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            message.content,
+            style: const TextStyle(
+              fontFamily: 'Alegreya',
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+              height: 1.4, // line-height 140%
+            ),
+          ),
+        ),
+
+        // Time and copy button - Web: mt-3 pt-2, 14px, white/50
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 12),
           child: Row(
-            mainAxisAlignment:
-                isUser ? MainAxisAlignment.end : MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 formattedTime,
-                style: _timeTextStyle(context),
-              ),
-              if (!isUser)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(
-                          ClipboardData(text: widget.message.content));
-                      ToastUtils.showSuccess(context, 'Copied to clipboard');
-                    },
-                    child: Icon(
-                      Icons.content_copy,
-                      color: Colors.white.withOpacity(0.5),
-                      size: 16,
-                    ),
-                  ),
+                style: TextStyle(
+                  fontFamily: 'Alegreya',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.5),
+                  height: 1.25,
                 ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: message.content));
+                  ToastUtils.showSuccess(context, 'Copied to clipboard');
+                },
+                child: CopyIcon(
+                  size: 18,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
             ],
           ),
         ),
       ],
     );
   }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  // Style methods using theme (need context)
-  static TextStyle _dateHeaderStyle(BuildContext context) {
-    return Theme.of(context).textTheme.labelSmall!.copyWith(
-          color: Colors.white.withOpacity(0.38),
-          letterSpacing: 1.2,
-          fontWeight: FontWeight.w500,
-        );
-  }
-
-  static TextStyle _speakerNameStyle(BuildContext context) {
-    return Theme.of(context).textTheme.labelMedium!.copyWith(
-          color: Colors.white.withOpacity(0.58),
-          fontWeight: FontWeight.w600,
-        );
-  }
-
-  static TextStyle _messageTextStyle(BuildContext context) {
-    return Theme.of(context).textTheme.bodyMedium!.copyWith(
-          color: Colors.white,
-          height: 1.4,
-        );
-  }
-
-  static TextStyle _timeTextStyle(BuildContext context) {
-    return Theme.of(context).textTheme.labelSmall!.copyWith(
-          color: Colors.white.withOpacity(0.38),
-        );
-  }
-
-  static final _userBubbleDecoration = BoxDecoration(
-    color: Colors.white.withOpacity(0.18),
-    borderRadius: const BorderRadius.all(Radius.circular(14)),
-    border: Border.all(
-      color: Colors.white.withOpacity(0.08),
-      width: 0.5,
-    ),
-  );
 }
 
-/// Typing indicator widget (extracted for const optimization)
+/// Typing indicator matching web exactly
 class _TypingIndicator extends StatelessWidget {
   const _TypingIndicator();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Sai Baba',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: Colors.white.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
+          // Speaker name
+          Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 4),
+            child: Text(
+              'Sathya Sai Baba',
+              style: TextStyle(
+                fontFamily: 'Alegreya',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.6),
+                height: 1.25,
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
-          const Row(
-            children: [
-              _TypingDot(delay: 0),
-              SizedBox(width: 8),
-              _TypingDot(delay: 200),
-              SizedBox(width: 8),
-              _TypingDot(delay: 400),
-            ],
+
+          // "Pondering" with colored dots - Web style
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Text(
+                  'Pondering',
+                  style: TextStyle(
+                    fontFamily: 'Alegreya',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Colored bouncing dots matching web
+                _AnimatedDot(color: const Color(0xFFFF0000), delay: 0),
+                const SizedBox(width: 4),
+                _AnimatedDot(color: const Color(0xFFFFA569), delay: 150),
+                const SizedBox(width: 4),
+                _AnimatedDot(color: const Color(0xFFA7A6FB), delay: 300),
+                const SizedBox(width: 4),
+                _AnimatedDot(color: const Color(0xFF046E80), delay: 450),
+              ],
+            ),
           ),
         ],
       ),
@@ -514,17 +320,18 @@ class _TypingIndicator extends StatelessWidget {
   }
 }
 
-/// Animated typing dot indicator
-class _TypingDot extends StatefulWidget {
+/// Animated bouncing dot
+class _AnimatedDot extends StatefulWidget {
+  final Color color;
   final int delay;
 
-  const _TypingDot({required this.delay});
+  const _AnimatedDot({required this.color, required this.delay});
 
   @override
-  State<_TypingDot> createState() => _TypingDotState();
+  State<_AnimatedDot> createState() => _AnimatedDotState();
 }
 
-class _TypingDotState extends State<_TypingDot>
+class _AnimatedDotState extends State<_AnimatedDot>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -533,13 +340,18 @@ class _TypingDotState extends State<_TypingDot>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
 
-    _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    // Web uses cubic-bezier(0.68, -0.55, 0.27, 1.55) - bouncy effect
+    _animation = Tween<double>(
+      begin: 0,
+      end: -6,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Cubic(0.68, -0.55, 0.27, 1.55),
+    ));
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) {
@@ -556,16 +368,21 @@ class _TypingDotState extends State<_TypingDot>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _animation,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.7),
-          shape: BoxShape.circle,
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _animation.value),
+          child: Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: widget.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
     );
   }
 }

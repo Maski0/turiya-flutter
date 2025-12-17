@@ -6,8 +6,20 @@ import 'services/screen_recording_service.dart';
 
 class AudioStreamer {
   final ElevenLabsService elevenLabsService;
+  bool _isCancelled = false;
 
   AudioStreamer(this.elevenLabsService);
+
+  /// Cancel the current streaming operation
+  void cancel() {
+    _isCancelled = true;
+    print('🛑 AudioStreamer: Cancel requested');
+  }
+
+  /// Reset cancel flag for new stream
+  void _resetCancel() {
+    _isCancelled = false;
+  }
 
   /// Streams audio to Unity for lip-sync playback with real-time alignment data
   /// Uses time-based batching: accumulates 3 seconds worth of audio, sends batch every 2 seconds
@@ -24,6 +36,7 @@ class AudioStreamer {
     String language = 'telugu',
   }) async {
     final consolidated = ConsolidatedAlignment();
+    _resetCancel(); // Reset cancel flag for new stream
 
     try {
       // DIAGNOSTICS: Track timing
@@ -56,6 +69,13 @@ class AudioStreamer {
       // Stream chunks and batch them based on audio duration
       await for (final audioChunk in elevenLabsService
           .streamTextToSpeechWithTimestamps(text, language: language)) {
+        // Check if cancelled
+        if (_isCancelled) {
+          print('🛑 AudioStreamer: Streaming cancelled by user');
+          sendToUnity("Flutter", "OnAudioChunk", "END");
+          return consolidated;
+        }
+
         totalChunks++;
 
         // DIAGNOSTICS: Measure time between chunks

@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/credits/credits_bloc.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 
-class ProfileAvatarWidget extends StatelessWidget {
+class ProfileAvatarWidget extends StatefulWidget {
   final VoidCallback onTap;
 
   const ProfileAvatarWidget({
@@ -13,9 +13,38 @@ class ProfileAvatarWidget extends StatelessWidget {
   });
 
   @override
+  State<ProfileAvatarWidget> createState() => _ProfileAvatarWidgetState();
+}
+
+class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeIn,
+    );
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: BlocBuilder<AuthBloc, AuthState>(
         builder: (context, authState) {
           if (authState is! AuthAuthenticated) {
@@ -27,48 +56,83 @@ class ProfileAvatarWidget extends StatelessWidget {
 
           return BlocBuilder<CreditsBloc, CreditsState>(
             builder: (context, creditsState) {
-              String displayText = '';
-              Color backgroundColor = Colors.blue;
+              // Determine credits display
+              String creditsText = '';
+              bool isUnlimited = false;
 
               if (creditsState is CreditsLoaded) {
                 if (creditsState.isPro) {
-                  displayText = '★';
-                  backgroundColor = Colors.amber;
+                  creditsText = '∞';
+                  isUnlimited = true;
                 } else {
-                  displayText = '${creditsState.totalCredits}';
-                  backgroundColor = Colors.blue;
+                  creditsText = '${creditsState.totalCredits}';
+                }
+
+                // Trigger fade in animation when credits load
+                if (!_hasAnimated) {
+                  _hasAnimated = true;
+                  _fadeController.forward();
                 }
               }
 
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0x1AFFFFFF),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0x33FFFFFF),
-                        width: 1,
+              // Don't show until credits are loaded
+              if (creditsState is! CreditsLoaded) {
+                return const SizedBox.shrink();
+              }
+
+              // Full pill shape - rounded on both sides with fade animation
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: const Color(0x1AFFFFFF),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: const Color(0x33FFFFFF),
+                          width: 1,
+                        ),
                       ),
-                    ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Profile image centered
-                        Center(
-                          child: Container(
-                            width: 32,
-                            height: 32,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Credits display on the left
+                          Container(
+                            height: 52,
+                            alignment: Alignment.center,
+                            margin: const EdgeInsets.only(left: 18, right: 10),
+                            child: Text(
+                              creditsText,
+                              textAlign: TextAlign.center,
+                              strutStyle: const StrutStyle(
+                                forceStrutHeight: true,
+                                height: 1.0,
+                              ),
+                              style: TextStyle(
+                                fontFamily: 'Alegreya',
+                                fontSize: isUnlimited ? 26 : 20,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withOpacity(0.9),
+                                height: 1.0,
+                                leadingDistribution:
+                                    TextLeadingDistribution.even,
+                              ),
+                            ),
+                          ),
+                          // Profile image on the right (circular)
+                          Container(
+                            width: 40,
+                            height: 40,
+                            margin: const EdgeInsets.only(
+                                right: 6, top: 6, bottom: 6),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.4),
-                                width: 1,
-                              ),
+                              color: Colors.blue,
                             ),
                             child: ClipOval(
                               child: avatarUrl != null
@@ -84,42 +148,8 @@ class ProfileAvatarWidget extends StatelessWidget {
                                       user.email ?? 'U', context),
                             ),
                           ),
-                        ),
-                        // Credits badge (bottom right)
-                        if (creditsState is CreditsLoaded)
-                          Positioned(
-                            right: 2,
-                            bottom: 2,
-                            child: Container(
-                              constraints: const BoxConstraints(minWidth: 16),
-                              height: 16,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                color: backgroundColor,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.8),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  displayText,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                        color: Colors.white,
-                                        fontSize: displayText == '★' ? 9 : 8,
-                                        fontWeight: FontWeight.bold,
-                                        height: 1.0,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Animated star border effect that creates a glowing border animation
-/// Wraps any child widget with two animated glowing lines that move around the border
+/// Animated star border - glow sweeps back and forth
 class AnimatedStarBorder extends StatefulWidget {
   final Widget child;
   final Color color;
   final Duration speed;
+  final double borderRadius;
 
   const AnimatedStarBorder({
     super.key,
     required this.child,
-    this.color = const Color(0x99FFFFFF), // rgba(255, 255, 255, 0.6)
+    this.color = const Color(0xFFFFFFFF),
     this.speed = const Duration(seconds: 8),
+    this.borderRadius = 12,
   });
 
   @override
@@ -21,7 +22,6 @@ class AnimatedStarBorder extends StatefulWidget {
 class _AnimatedStarBorderState extends State<AnimatedStarBorder>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
 
   @override
   void initState() {
@@ -29,113 +29,114 @@ class _AnimatedStarBorderState extends State<AnimatedStarBorder>
     _controller = AnimationController(
       duration: widget.speed,
       vsync: this,
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.linear),
     );
+
+    // Start animation and add listener for pause between cycles
+    _controller.addStatusListener(_onAnimationStatus);
+    _controller.forward();
+  }
+
+  void _onAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      // Pause for 3 seconds before restarting
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          _controller.reset();
+          _controller.forward();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeStatusListener(_onAnimationStatus);
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final glowWidth = width * 3; // 300% width like web
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(widget.borderRadius),
+      child: Stack(
+        children: [
+          // Child content
+          widget.child,
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12), // rounded-xl
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Child content
-              widget.child,
-
-              // Bottom star animation - moves from right to left
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  // Web: starts at right: -250%, ends at right: -100% (moves left)
-                  // 0% -> right: -glowWidth * 2.5, 100% -> right: -glowWidth
-                  final rightOffset =
-                      -glowWidth * 2.5 + (_animation.value * glowWidth * 1.5);
-                  return Positioned(
-                    bottom: 0,
-                    right: rightOffset,
-                    child: IgnorePointer(
-                      child: Opacity(
-                        // Web: opacity-20 (0.2) fading to 0
-                        opacity: 0.7 * (1.0 - _animation.value),
-                        child: Container(
-                          width: glowWidth,
-                          height: 16, // h-4 = 16px
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(9999),
-                            gradient: RadialGradient(
-                              center: Alignment.center,
-                              radius: 0.5,
-                              colors: [
-                                widget.color,
-                                widget.color.withOpacity(0.3),
-                                Colors.transparent,
-                              ],
-                              stops: const [0.0, 0.05, 0.1],
-                            ),
-                          ),
-                        ),
-                      ),
+          // Animated glow overlay
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: _StarGlowPainter(
+                      progress: _controller.value,
+                      color: widget.color,
                     ),
                   );
                 },
               ),
-
-              // Top star animation - moves from left to right
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  // Web: starts at left: -250%, ends at left: -100% (moves right)
-                  // 0% -> left: -glowWidth * 2.5, 100% -> left: -glowWidth
-                  final leftOffset =
-                      -glowWidth * 2.5 + (_animation.value * glowWidth * 1.5);
-                  return Positioned(
-                    top: 0,
-                    left: leftOffset,
-                    child: IgnorePointer(
-                      child: Opacity(
-                        // Web: opacity-20 (0.2) fading to 0
-                        opacity: 0.7 * (1.0 - _animation.value),
-                        child: Container(
-                          width: glowWidth,
-                          height: 16, // h-4 = 16px
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(9999),
-                            gradient: RadialGradient(
-                              center: Alignment.center,
-                              radius: 0.5,
-                              colors: [
-                                widget.color,
-                                widget.color.withOpacity(0.3),
-                                Colors.transparent,
-                              ],
-                              stops: const [0.0, 0.05, 0.1],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+}
+
+class _StarGlowPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _StarGlowPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final glowRadius = 60.0;
+    final opacity = 0.7 * (1 - progress * 0.3); // Subtle fade
+
+    // Extended range so glow enters and exits beyond the edges
+    final totalWidth = size.width + glowRadius * 2;
+
+    // Bottom glow - moves right to left
+    // Starts from right (outside) and exits left (outside)
+    final bottomX = (size.width + glowRadius) - (totalWidth * progress);
+    final bottomCenter = Offset(bottomX, size.height + 35); // 35px below bottom
+
+    final bottomPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withOpacity(opacity),
+          color.withOpacity(opacity * 0.4),
+          color.withOpacity(0),
+        ],
+        stops: const [0.0, 0.4, 1.0],
+      ).createShader(Rect.fromCircle(center: bottomCenter, radius: glowRadius));
+
+    canvas.drawCircle(bottomCenter, glowRadius, bottomPaint);
+
+    // Top glow - moves left to right
+    // Starts from left (outside) and exits right (outside)
+    final topX = -glowRadius + (totalWidth * progress);
+    final topCenter = Offset(topX, -40); // 40px above top
+
+    final topPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withOpacity(opacity),
+          color.withOpacity(opacity * 0.4),
+          color.withOpacity(0),
+        ],
+        stops: const [0.0, 0.4, 1.0],
+      ).createShader(Rect.fromCircle(center: topCenter, radius: glowRadius));
+
+    canvas.drawCircle(topCenter, glowRadius, topPaint);
+  }
+
+  @override
+  bool shouldRepaint(_StarGlowPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }

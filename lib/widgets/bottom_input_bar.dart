@@ -4,6 +4,7 @@ import 'icons/mic_icon.dart';
 import 'icons/send_icon.dart';
 import 'icons/check_icon.dart';
 import 'icons/textchat_icon.dart';
+import 'star_border.dart';
 
 class BottomInputBar extends StatefulWidget {
   final TextEditingController textController;
@@ -63,6 +64,57 @@ class _BottomInputBarState extends State<BottomInputBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Pondering chip - shown above input when generating (not playing)
+          if (widget.isGenerating && !widget.isAudioPlaying)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x30000000),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0x20FFFFFF),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Pondering',
+                          style: TextStyle(
+                            fontFamily: 'Alegreya',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Colored bouncing dots
+                        const _PonderingDot(color: Color(0xFFFF0000), delay: 0),
+                        const SizedBox(width: 3),
+                        const _PonderingDot(
+                            color: Color(0xFFFFA569), delay: 150),
+                        const SizedBox(width: 3),
+                        const _PonderingDot(
+                            color: Color(0xFFA7A6FB), delay: 300),
+                        const SizedBox(width: 3),
+                        const _PonderingDot(
+                            color: Color(0xFF046E80), delay: 450),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Row containing input bar and optional chat button
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -75,159 +127,175 @@ class _BottomInputBarState extends State<BottomInputBar> {
                     left: 8,
                     right: widget.showChatButton ? 0 : 8,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: BackdropFilter(
-                      // High blur for liquid glass refraction effect
-                      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                      child: Container(
-                        height: 56, // Web: containerBase = 56px
-                        decoration: BoxDecoration(
-                          // Glass effect - no background, just border
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0x33FFFFFF),
-                            width: 0.5,
+                  // Animated star border with frosted glass effect
+                  child: AnimatedStarBorder(
+                    color: const Color(0x99FFFFFF),
+                    speed: const Duration(seconds: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                        child: Container(
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0x28FFFFFF), // ~16% opacity white
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0x40FFFFFF),
+                              width: 0.5,
+                            ),
                           ),
-                        ),
-                        child: Padding(
-                          // Web: p-4 but we need less vertical to fit in 56px
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Textarea/Input field
-                              Expanded(
-                                child: TextField(
-                                  controller: widget.textController,
-                                  focusNode: widget.focusNode,
-                                  readOnly: widget.isGenerating ||
-                                      widget.isAudioPlaying,
-                                  maxLines: null,
-                                  // Use theme: titleLarge (18px)
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge!
-                                      .copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.25,
-                                      ),
-                                  decoration: InputDecoration(
-                                    hintText: widget.isGenerating
-                                        ? 'Pondering...'
-                                        : 'Ask what your heart seeks',
+                          child: Padding(
+                            // Web: p-4 but we need less vertical to fit in 56px
+                            padding: const EdgeInsets.only(
+                              left: 18,
+                              top: 6,
+                              right: 8,
+                              bottom: 6,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Textarea/Input field
+                                Expanded(
+                                  child: TextField(
+                                    controller: widget.textController,
+                                    focusNode: widget.focusNode,
+                                    readOnly: widget.isGenerating ||
+                                        widget.isAudioPlaying,
+                                    maxLines: null,
                                     // Use theme: titleLarge (18px)
-                                    hintStyle: Theme.of(context)
+                                    style: Theme.of(context)
                                         .textTheme
                                         .titleLarge!
                                         .copyWith(
-                                          color: Colors.white.withOpacity(0.5),
+                                          color: Colors.white,
                                           fontWeight: FontWeight.w500,
                                           height: 1.25,
                                         ),
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.zero,
-                                    isDense: true,
+                                    decoration: InputDecoration(
+                                      hintText: widget.isGenerating
+                                          ? 'Pondering...'
+                                          : 'Ask what your heart seeks',
+                                      // Use theme: titleLarge (18px)
+                                      hintStyle: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge!
+                                          .copyWith(
+                                            color:
+                                                Colors.white.withOpacity(0.5),
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.25,
+                                          ),
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                      isDense: true,
+                                    ),
+                                    onSubmitted: widget.onSubmit,
                                   ),
-                                  onSubmitted: widget.onSubmit,
                                 ),
-                              ),
 
-                              // Mic button - disabled during generating/streaming
-                              GestureDetector(
-                                onTap: (widget.isGenerating ||
-                                        widget.isAudioPlaying)
-                                    ? null
-                                    : widget.onMicTap,
-                                onLongPress: (widget.isGenerating ||
-                                        widget.isAudioPlaying)
-                                    ? null
-                                    : widget.onMicLongPress,
-                                child: Opacity(
-                                  opacity: (widget.isGenerating ||
+                                // Mic button - disabled during generating/streaming
+                                GestureDetector(
+                                  onTap: (widget.isGenerating ||
                                           widget.isAudioPlaying)
-                                      ? 0.3
-                                      : 1.0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const MicIcon(size: 24),
-                                  ),
-                                ),
-                              ),
-
-                              // Right button - dynamic based on state
-                              if (widget.isRecording)
-                                // Recording: show check to submit
-                                GestureDetector(
-                                  onTap: () => widget
-                                      .onSubmit(widget.textController.text),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(left: 12),
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const CheckIcon(size: 24),
-                                  ),
-                                )
-                              else if (widget.isAudioPlaying &&
-                                  widget.onStopAudio != null)
-                                // Streaming: show stop button
-                                GestureDetector(
-                                  onTap: widget.onStopAudio,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(left: 4),
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Icon(
-                                      Icons.stop_rounded,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
-                                  ),
-                                )
-                              else
-                                // Normal/Pondering: show send button (disabled when pondering)
-                                Opacity(
-                                  opacity: widget.isGenerating ? 0.3 : 1.0,
-                                  child: GestureDetector(
-                                    onTap: (widget.isGenerating ||
-                                            widget.textController.text
-                                                .trim()
-                                                .isEmpty)
-                                        ? null
-                                        : () => widget.onSubmit(
-                                            widget.textController.text),
+                                      ? null
+                                      : widget.onMicTap,
+                                  onLongPress: (widget.isGenerating ||
+                                          widget.isAudioPlaying)
+                                      ? null
+                                      : widget.onMicLongPress,
+                                  child: Opacity(
+                                    opacity: (widget.isGenerating ||
+                                            widget.isAudioPlaying)
+                                        ? 0.3
+                                        : 1.0,
                                     child: Container(
-                                      margin: const EdgeInsets.only(left: 4),
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
                                         color: Colors.transparent,
                                         borderRadius: BorderRadius.circular(20),
                                       ),
-                                      child: SendIcon(
-                                        isActive: widget.textController.text
-                                                .trim()
-                                                .isNotEmpty &&
-                                            !widget.isGenerating,
-                                        size: 24,
-                                      ),
+                                      child: const MicIcon(size: 28),
                                     ),
                                   ),
                                 ),
-                            ],
+
+                                // Right button - dynamic based on state
+                                if (widget.isRecording)
+                                  // Recording: show check to submit
+                                  GestureDetector(
+                                    onTap: () => widget
+                                        .onSubmit(widget.textController.text),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(left: 12),
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.transparent,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const CheckIcon(size: 24),
+                                    ),
+                                  )
+                                else if (widget.isAudioPlaying &&
+                                    widget.onStopAudio != null)
+                                  // Streaming: show stop button in circle
+                                  GestureDetector(
+                                    onTap: widget.onStopAudio,
+                                    child: Container(
+                                      width: 38,
+                                      height: 38,
+                                      margin: const EdgeInsets.only(left: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.15),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(0.2),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.stop_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  // Normal/Pondering: show send button (disabled when pondering)
+                                  Opacity(
+                                    opacity: widget.isGenerating ? 0.3 : 1.0,
+                                    child: GestureDetector(
+                                      onTap: (widget.isGenerating ||
+                                              widget.textController.text
+                                                  .trim()
+                                                  .isEmpty)
+                                          ? null
+                                          : () => widget.onSubmit(
+                                              widget.textController.text),
+                                      child: Container(
+                                        margin: const EdgeInsets.only(left: 4),
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: SendIcon(
+                                          isActive: widget.textController.text
+                                                  .trim()
+                                                  .isNotEmpty &&
+                                              !widget.isGenerating,
+                                          size: 28,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -243,19 +311,22 @@ class _BottomInputBarState extends State<BottomInputBar> {
                       widget.isAudioPlaying))
                 Padding(
                   padding: const EdgeInsets.only(left: 8, right: 8),
+                  // Frosted glass effect with BackdropFilter
                   child: GestureDetector(
                     onTap: widget.onChatButtonTap,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                         child: Container(
                           height: 56,
                           width: 56,
                           decoration: BoxDecoration(
+                            color:
+                                const Color(0x28FFFFFF), // ~16% opacity white
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0x33FFFFFF),
+                              color: const Color(0x40FFFFFF),
                               width: 0.5,
                             ),
                           ),
@@ -271,6 +342,73 @@ class _BottomInputBarState extends State<BottomInputBar> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Animated bouncing dot for pondering state
+class _PonderingDot extends StatefulWidget {
+  final Color color;
+  final int delay;
+
+  const _PonderingDot({required this.color, required this.delay});
+
+  @override
+  State<_PonderingDot> createState() => _PonderingDotState();
+}
+
+class _PonderingDotState extends State<_PonderingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    // Subtle bouncy effect - reduced vertical movement
+    _animation = Tween<double>(
+      begin: 0,
+      end: -3,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Cubic(0.68, -0.55, 0.27, 1.55),
+    ));
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _animation.value),
+          child: Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: widget.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
     );
   }
 }
