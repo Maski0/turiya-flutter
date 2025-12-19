@@ -4,7 +4,7 @@ description: Turiya - AI spiritual companion app
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
@@ -69,6 +69,20 @@ dev_dependencies:
   # Isar code generation
   isar_generator: ^3.1.0+1
   build_runner: ^2.4.6
+
+  # App icon generator
+  flutter_launcher_icons: ^0.14.2
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/icon.png"
+  min_sdk_android: 21
+  # iOS specific
+  remove_alpha_ios: true
+  # Android adaptive icon (optional - uses same icon for foreground)
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/icon.png"
 
 flutter:
   uses-material-design: true

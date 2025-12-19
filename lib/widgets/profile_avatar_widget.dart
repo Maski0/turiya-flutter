@@ -3,13 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/credits/credits_bloc.dart';
 import '../blocs/auth/auth_bloc_export.dart';
+import '../theme/app_theme.dart';
 
 class ProfileAvatarWidget extends StatefulWidget {
-  final VoidCallback onTap;
+  final VoidCallback onSettingsTap;
+  final VoidCallback? onMusicToggle;
+  final bool isMusicMuted;
+  final VoidCallback? onRecordTap;
+  final VoidCallback? onLanguageTap;
+  final String? currentLanguage;
 
   const ProfileAvatarWidget({
     super.key,
-    required this.onTap,
+    required this.onSettingsTap,
+    this.onMusicToggle,
+    this.isMusicMuted = false,
+    this.onRecordTap,
+    this.onLanguageTap,
+    this.currentLanguage,
   });
 
   @override
@@ -21,6 +32,8 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   bool _hasAnimated = false;
+  OverlayEntry? _dropdownOverlay;
+  final LayerLink _layerLink = LayerLink();
 
   @override
   void initState() {
@@ -37,127 +50,330 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
 
   @override
   void dispose() {
+    _removeDropdown();
     _fadeController.dispose();
     super.dispose();
   }
 
+  void _toggleDropdown() {
+    if (_dropdownOverlay != null) {
+      _removeDropdown();
+    } else {
+      _showDropdown();
+    }
+  }
+
+  void _showDropdown() {
+    _dropdownOverlay = OverlayEntry(
+      builder: (context) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _removeDropdown,
+        child: Stack(
+          children: [
+            // Invisible full-screen barrier to catch taps outside
+            Positioned.fill(
+              child: Container(color: Colors.transparent),
+            ),
+            // The dropdown positioned relative to the button
+            CompositedTransformFollower(
+              link: _layerLink,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              offset: const Offset(0, 8),
+              child: Material(
+                color: Colors.transparent,
+                child: _buildDropdownContent(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_dropdownOverlay!);
+  }
+
+  void _removeDropdown() {
+    _dropdownOverlay?.remove();
+    _dropdownOverlay = null;
+  }
+
+  Widget _buildDropdownContent() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          width: 200,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withOpacity(0.22),
+                Colors.white.withOpacity(0.08),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0x40FFFFFF),
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Mute/Unmute Audio
+              if (widget.onMusicToggle != null) ...[
+                _buildDropdownItem(
+                  icon: widget.isMusicMuted
+                      ? Icons.volume_off_outlined
+                      : Icons.volume_up_outlined,
+                  title: widget.isMusicMuted ? 'Unmute Audio' : 'Mute Audio',
+                  onTap: () {
+                    _removeDropdown();
+                    widget.onMusicToggle?.call();
+                  },
+                ),
+                _buildDivider(),
+              ],
+
+              // Record
+              if (widget.onRecordTap != null) ...[
+                _buildDropdownItem(
+                  icon: Icons.fiber_manual_record_outlined,
+                  title: 'Record',
+                  onTap: () {
+                    _removeDropdown();
+                    widget.onRecordTap?.call();
+                  },
+                ),
+                _buildDivider(),
+              ],
+
+              // Change Language
+              if (widget.onLanguageTap != null) ...[
+                _buildDropdownItem(
+                  icon: Icons.language_outlined,
+                  title: 'Language',
+                  subtitle: widget.currentLanguage,
+                  onTap: () {
+                    _removeDropdown();
+                    widget.onLanguageTap?.call();
+                  },
+                ),
+                _buildDivider(),
+              ],
+
+              // Settings
+              _buildDropdownItem(
+                icon: Icons.settings_outlined,
+                title: 'Settings',
+                onTap: () {
+                  _removeDropdown();
+                  widget.onSettingsTap();
+                },
+              ),
+              _buildDivider(),
+
+              // Log Out
+              _buildDropdownItem(
+                icon: Icons.logout,
+                title: 'Log Out',
+                isDestructive: true,
+                onTap: () {
+                  _removeDropdown();
+                  context.read<AuthBloc>().add(const AuthSignOutRequested());
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: BlocBuilder<AuthBloc, AuthState>(
-        builder: (context, authState) {
-          if (authState is! AuthAuthenticated) {
-            return const SizedBox.shrink();
-          }
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, authState) {
+        if (authState is! AuthAuthenticated) {
+          return const SizedBox.shrink();
+        }
 
-          final user = authState.user;
-          final avatarUrl = user.userMetadata?['avatar_url'] as String?;
+        final user = authState.user;
+        final avatarUrl = user.userMetadata?['avatar_url'] as String?;
 
-          return BlocBuilder<CreditsBloc, CreditsState>(
-            builder: (context, creditsState) {
-              // Determine credits display
-              String creditsText = '';
-              bool isUnlimited = false;
+        return BlocBuilder<CreditsBloc, CreditsState>(
+          builder: (context, creditsState) {
+            // Determine credits display
+            String creditsText = '';
+            bool isUnlimited = false;
 
-              if (creditsState is CreditsLoaded) {
-                if (creditsState.isPro) {
-                  creditsText = '∞';
-                  isUnlimited = true;
-                } else {
-                  creditsText = '${creditsState.totalCredits}';
-                }
-
-                // Trigger fade in animation when credits load
-                if (!_hasAnimated) {
-                  _hasAnimated = true;
-                  _fadeController.forward();
-                }
+            if (creditsState is CreditsLoaded) {
+              if (creditsState.isPro) {
+                creditsText = '∞';
+                isUnlimited = true;
+              } else {
+                creditsText = '${creditsState.totalCredits}';
               }
 
-              // Don't show until credits are loaded
-              if (creditsState is! CreditsLoaded) {
-                return const SizedBox.shrink();
+              // Trigger fade in animation when credits load
+              if (!_hasAnimated) {
+                _hasAnimated = true;
+                _fadeController.forward();
               }
+            }
 
-              // Full pill shape - rounded on both sides with fade animation
-              return FadeTransition(
-                opacity: _fadeAnimation,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                    child: Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: const Color(0x1AFFFFFF),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: const Color(0x33FFFFFF),
-                          width: 1,
+            // Don't show until credits are loaded
+            if (creditsState is! CreditsLoaded) {
+              return const SizedBox.shrink();
+            }
+
+            return FadeTransition(
+              opacity: _fadeAnimation,
+              child: CompositedTransformTarget(
+                link: _layerLink,
+                child: GestureDetector(
+                  onTap: _toggleDropdown,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: Container(
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: const Color(0x1AFFFFFF),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: const Color(0x33FFFFFF),
+                            width: 1,
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Credits display on the left
-                          Container(
-                            height: 52,
-                            alignment: Alignment.center,
-                            margin: const EdgeInsets.only(left: 18, right: 10),
-                            child: Text(
-                              creditsText,
-                              textAlign: TextAlign.center,
-                              strutStyle: const StrutStyle(
-                                forceStrutHeight: true,
-                                height: 1.0,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Credits display on the left
+                            Container(
+                              height: 52,
+                              alignment: Alignment.center,
+                              margin:
+                                  const EdgeInsets.only(left: 18, right: 10),
+                              child: Text(
+                                creditsText,
+                                textAlign: TextAlign.center,
+                                strutStyle: const StrutStyle(
+                                  forceStrutHeight: true,
+                                  height: 1.0,
+                                ),
+                                style: TextStyle(
+                                  fontFamily: AppTheme.fontFamily,
+                                  fontSize: isUnlimited ? 26 : 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.secondaryWhite,
+                                  height: 1.0,
+                                  leadingDistribution:
+                                      TextLeadingDistribution.even,
+                                ),
                               ),
-                              style: TextStyle(
-                                fontFamily: 'Alegreya',
-                                fontSize: isUnlimited ? 26 : 20,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white.withOpacity(0.9),
-                                height: 1.0,
-                                leadingDistribution:
-                                    TextLeadingDistribution.even,
+                            ),
+                            // Profile image on the right (circular)
+                            Container(
+                              width: 40,
+                              height: 40,
+                              margin: const EdgeInsets.only(
+                                  right: 6, top: 6, bottom: 6),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.blue,
+                              ),
+                              child: ClipOval(
+                                child: avatarUrl != null
+                                    ? Image.network(
+                                        avatarUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                _buildDefaultAvatar(
+                                                    user.email ?? 'U', context),
+                                      )
+                                    : _buildDefaultAvatar(
+                                        user.email ?? 'U', context),
                               ),
                             ),
-                          ),
-                          // Profile image on the right (circular)
-                          Container(
-                            width: 40,
-                            height: 40,
-                            margin: const EdgeInsets.only(
-                                right: 6, top: 6, bottom: 6),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.blue,
-                            ),
-                            child: ClipOval(
-                              child: avatarUrl != null
-                                  ? Image.network(
-                                      avatarUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              _buildDefaultAvatar(
-                                                  user.email ?? 'U', context),
-                                    )
-                                  : _buildDefaultAvatar(
-                                      user.email ?? 'U', context),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              );
-            },
-          );
-        },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    String? subtitle,
+    bool isDestructive = false,
+  }) {
+    final color = isDestructive
+        ? const Color(0xFFfca5a5) // red-300
+        : Colors.white;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: color,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: color,
+                        ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.tertiaryWhite,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      width: double.infinity,
+      color: const Color(0x20FFFFFF),
     );
   }
 

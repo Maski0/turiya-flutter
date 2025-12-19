@@ -18,6 +18,7 @@ class BottomInputBar extends StatefulWidget {
   final VoidCallback? onStopAudio;
   final bool showChatButton;
   final VoidCallback? onChatButtonTap;
+  final bool enabled;
 
   const BottomInputBar({
     super.key,
@@ -32,6 +33,7 @@ class BottomInputBar extends StatefulWidget {
     this.onStopAudio,
     this.showChatButton = false,
     this.onChatButtonTap,
+    this.enabled = true,
   });
 
   @override
@@ -162,6 +164,7 @@ class _BottomInputBarState extends State<BottomInputBar> {
                                   child: TextField(
                                     controller: widget.textController,
                                     focusNode: widget.focusNode,
+                                    enabled: widget.enabled,
                                     readOnly: widget.isGenerating ||
                                         widget.isAudioPlaying,
                                     maxLines: null,

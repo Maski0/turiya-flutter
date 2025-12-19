@@ -17,10 +17,9 @@ import 'services/backend_api_service.dart';
 import 'services/cache_service.dart';
 import 'models/cached_message.dart';
 import 'models/alignment_data.dart';
-import 'widgets/glass_button.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/chat_sidebar.dart';
-import 'widgets/menu_drawer.dart';
+import 'widgets/profile_menu.dart';
 import 'widgets/recording_indicator.dart';
 import 'widgets/recording_preview_overlay.dart';
 import 'widgets/icons/hamburger_icon.dart';
@@ -332,6 +331,11 @@ class _MainScreenState extends State<_MainScreen>
         });
       });
     } else {
+      // Dismiss keyboard before showing modal
+      FocusManager.instance.primaryFocus?.unfocus();
+      _textFocusNode.unfocus();
+      SystemChannels.textInput.invokeMethod('TextInput.hide');
+
       // Open: show first, then animate in
       setState(() {
         _showLoginModal = true;
@@ -1124,141 +1128,7 @@ class _MainScreenState extends State<_MainScreen>
                                                     child: child,
                                                   );
                                                 },
-                                                child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          top: 12),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.end,
-                                                    children: [
-                                                      Column(
-                                                        children: [
-                                                          // Record button
-                                                          GestureDetector(
-                                                            onTap:
-                                                                _toggleScreenRecording,
-                                                            child: Container(
-                                                              width: 44,
-                                                              height: 44,
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                gradient:
-                                                                    LinearGradient(
-                                                                  colors: [
-                                                                    Colors.white
-                                                                        .withOpacity(
-                                                                            0.18),
-                                                                    Colors.white
-                                                                        .withOpacity(
-                                                                            0.10),
-                                                                  ],
-                                                                ),
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            13),
-                                                                border:
-                                                                    Border.all(
-                                                                  color: Colors
-                                                                      .white
-                                                                      .withOpacity(
-                                                                          0.32),
-                                                                  width: 1.2,
-                                                                ),
-                                                                boxShadow: [
-                                                                  BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withOpacity(
-                                                                            0.18),
-                                                                    blurRadius:
-                                                                        10,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            3),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              child: Center(
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .fiber_manual_record,
-                                                                  color: Colors
-                                                                      .red
-                                                                      .shade400,
-                                                                  size: 22,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 12),
-                                                          // Language button
-                                                          GestureDetector(
-                                                            onTap:
-                                                                _showLanguageSelectionDialog,
-                                                            child: Container(
-                                                              width: 44,
-                                                              height: 44,
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                gradient:
-                                                                    LinearGradient(
-                                                                  colors: [
-                                                                    Colors.white
-                                                                        .withOpacity(
-                                                                            0.18),
-                                                                    Colors.white
-                                                                        .withOpacity(
-                                                                            0.10),
-                                                                  ],
-                                                                ),
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            13),
-                                                                border:
-                                                                    Border.all(
-                                                                  color: Colors
-                                                                      .white
-                                                                      .withOpacity(
-                                                                          0.32),
-                                                                  width: 1.2,
-                                                                ),
-                                                                boxShadow: [
-                                                                  BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withOpacity(
-                                                                            0.18),
-                                                                    blurRadius:
-                                                                        10,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            3),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              child:
-                                                                  const Center(
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .language,
-                                                                  color: Colors
-                                                                      .white,
-                                                                  size: 22,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
+                                                child: const SizedBox.shrink(),
                                               );
                                             },
                                           );
@@ -1426,6 +1296,7 @@ class _MainScreenState extends State<_MainScreen>
                               onMicTap: _toggleListening,
                               onStopAudio: _stopAudio,
                               showChatButton: !_showChatSidebar,
+                              enabled: !_showLoginModal,
                               onChatButtonTap: () {
                                 setState(() {
                                   _showChatSidebar = true;
@@ -1445,11 +1316,11 @@ class _MainScreenState extends State<_MainScreen>
                         ),
                       ),
 
-                      // Menu Drawer (Profile settings) - renders on top of everything
+                      // Profile Menu - renders on top of everything
                       if (_showMenuDrawer)
                         FadeTransition(
                           opacity: _fadeAnimation,
-                          child: MenuDrawer(
+                          child: ProfileMenu(
                             onClose: () {
                               _animationController.reverse().then((_) {
                                 setState(() {
@@ -1594,12 +1465,7 @@ class _MainScreenState extends State<_MainScreen>
     final isAuthenticated = await _backendApi.isAuthenticated();
     if (!isAuthenticated) {
       if (mounted) {
-        // Dismiss keyboard before showing login modal
-        FocusScope.of(context).unfocus();
-        _textFocusNode.unfocus();
-        SystemChannels.textInput.invokeMethod('TextInput.hide');
-
-        // Show info and login modal
+        // Show info and login modal (keyboard dismissed in _toggleLoginModal)
         ToastUtils.showInfo(context, 'Please sign in to chat with Sai Baba');
         _toggleLoginModal();
       }
@@ -1650,12 +1516,15 @@ class _MainScreenState extends State<_MainScreen>
   Widget _buildCreditsAndProfile(BuildContext context) {
     // Just use ProfileAvatarWidget which already shows credits badge
     return ProfileAvatarWidget(
-      onTap: () {
+      onSettingsTap: () {
         setState(() {
           _showMenuDrawer = true;
         });
         _animationController.forward();
       },
+      onRecordTap: _toggleScreenRecording,
+      onLanguageTap: _showLanguageSelectionDialog,
+      currentLanguage: _selectedLanguage == 'telugu' ? 'Telugu' : 'English',
     );
   }
 
