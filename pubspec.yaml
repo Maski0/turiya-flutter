@@ -36,9 +36,12 @@ dependencies:
   # Toast notifications with blur effect
   another_flushbar: ^1.12.30
 
-  # Speech to Text
+  # Speech to Text (fallback)
   speech_to_text: ^7.0.0
   permission_handler: ^11.0.1
+
+  # LiveKit for real-time voice
+  livekit_client: ^2.3.3
 
   # Widget Recording (record specific widget as MP4 video with audio)
   ffmpeg_kit_flutter_new: ^4.1.0

@@ -252,4 +252,46 @@ class BackendApiService {
       throw Exception('Failed to delete all memories: ${response.statusCode}');
     }
   }
+
+  /// Get LiveKit connection details for real-time voice
+  /// Returns serverUrl, roomName, participantToken, participantName
+  Future<Map<String, dynamic>> getLiveKitConnectionDetails({
+    String? threadId,
+    String agentName = 'turiya-agent',
+  }) async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final userId = getUserId();
+    if (userId == null) throw Exception('User ID not found');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/connection-details'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'thread_id': threadId,
+        'user_id': userId,
+        'room_config': {
+          'agents': [
+            {'agent_name': agentName}
+          ]
+        },
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication expired');
+    } else if (response.statusCode == 500) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['detail'] ?? 'LiveKit not configured');
+    } else {
+      throw Exception(
+          'Failed to get LiveKit connection: ${response.statusCode} - ${response.body}');
+    }
+  }
 }

@@ -33,6 +33,7 @@ import 'blocs/chat/chat_bloc_export.dart';
 import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
 import 'services/background_audio_service.dart';
+import 'services/livekit_service.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
@@ -114,6 +115,14 @@ class _MainScreenState extends State<_MainScreen>
   final ScrollController _scrollController = ScrollController();
   late AudioStreamer _audioStreamer;
   late stt.SpeechToText _speechToText;
+
+  // LiveKit for real-time voice
+  final LiveKitService _liveKitService = LiveKitService();
+  bool _isLiveKitMode = false; // Toggle between local STT and LiveKit
+  bool _isLiveKitConnected = false;
+  bool _isLiveKitConnecting = false;
+  bool _agentConnected = false;
+
   bool _isGenerating = false;
   bool _showLoginModal = false;
   bool _showChatSidebar = false;
@@ -188,6 +197,87 @@ class _MainScreenState extends State<_MainScreen>
     // Wait for first frame to ensure app is ready
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await BackgroundAudioService().initialize();
+      // Apply time of day after Unity loads (with delay)
+      _applyTimeOfDayFromClock();
+      // Setup LiveKit callbacks
+      _setupLiveKitCallbacks();
+    });
+  }
+
+  /// Setup LiveKit service callbacks
+  void _setupLiveKitCallbacks() {
+    _liveKitService.onConnectionStateChanged = (state) {
+      if (mounted) {
+        setState(() {
+          _isLiveKitConnected = state == 'connected';
+          _isLiveKitConnecting =
+              state == 'connecting' || state == 'reconnecting';
+        });
+        print('🎤 LiveKit connection state: $state');
+      }
+    };
+
+    _liveKitService.onAgentConnected = () {
+      if (mounted) {
+        setState(() {
+          _agentConnected = true;
+        });
+        print('🤖 LiveKit: Agent connected');
+        // Update Unity avatar state
+        _updateUnityAvatarState();
+      }
+    };
+
+    _liveKitService.onAgentDisconnected = () {
+      if (mounted) {
+        setState(() {
+          _agentConnected = false;
+        });
+        print('🤖 LiveKit: Agent disconnected');
+      }
+    };
+
+    _liveKitService.onAgentSpeakingChanged = (isSpeaking) {
+      if (mounted) {
+        setState(() {
+          _isAudioPlaying = isSpeaking;
+        });
+        _updateUnityAvatarState();
+        print(
+            '🔊 LiveKit: Agent ${isSpeaking ? "started" : "stopped"} speaking');
+      }
+    };
+
+    _liveKitService.onError = (error) {
+      print('❌ LiveKit error: $error');
+      if (mounted) {
+        ToastUtils.showError(context, 'Voice connection error');
+      }
+    };
+  }
+
+  /// Automatically set Unity scene ambience based on current time
+  void _applyTimeOfDayFromClock() {
+    // Delay to ensure Unity is fully loaded
+    Future.delayed(const Duration(seconds: 2), () {
+      final hour = DateTime.now().hour;
+
+      String timeOfDay;
+      if (hour >= 5 && hour < 17) {
+        // 5 AM - 5 PM = Morning/Day
+        timeOfDay = 'morning';
+        sendToUnity("TimeOfDay", "SetMorning", "");
+      } else if (hour >= 17 && hour < 20) {
+        // 5 PM - 8 PM = Evening
+        timeOfDay = 'evening';
+        sendToUnity("TimeOfDay", "SetEvening", "");
+      } else {
+        // 8 PM - 5 AM = Night
+        timeOfDay = 'night';
+        sendToUnity("TimeOfDay", "SetNight", "");
+      }
+
+      print('🌅 Auto time of day: $timeOfDay (hour: $hour)');
     });
   }
 
@@ -1328,6 +1418,8 @@ class _MainScreenState extends State<_MainScreen>
                                 });
                               });
                             },
+                            isLiveKitMode: _isLiveKitMode,
+                            onToggleVoiceMode: _toggleVoiceMode,
                           ),
                         ),
 
@@ -1427,11 +1519,130 @@ class _MainScreenState extends State<_MainScreen>
       return;
     }
 
-    if (_isRecording) {
-      _stopListening();
+    // Use LiveKit mode if enabled
+    if (_isLiveKitMode) {
+      await _toggleLiveKitVoice();
     } else {
-      _startListening();
+      // Use local speech-to-text
+      if (_isRecording) {
+        _stopListening();
+      } else {
+        _startListening();
+      }
     }
+  }
+
+  /// Toggle LiveKit voice mode (connect/disconnect and mic)
+  Future<void> _toggleLiveKitVoice() async {
+    if (_isLiveKitConnecting) {
+      print('⏳ LiveKit: Already connecting, please wait...');
+      return;
+    }
+
+    if (_isLiveKitConnected) {
+      // Toggle microphone if connected
+      if (_liveKitService.isMicrophoneEnabled) {
+        // Disable mic
+        await _liveKitService.setMicrophoneEnabled(false);
+        setState(() {
+          _isRecording = false;
+        });
+        print('🎤 LiveKit: Microphone disabled');
+      } else {
+        // Enable mic
+        await _liveKitService.setMicrophoneEnabled(true);
+        setState(() {
+          _isRecording = true;
+        });
+        print('🎤 LiveKit: Microphone enabled');
+      }
+    } else {
+      // Connect to LiveKit
+      await _connectToLiveKit();
+    }
+  }
+
+  /// Connect to LiveKit room
+  Future<void> _connectToLiveKit() async {
+    setState(() {
+      _isLiveKitConnecting = true;
+    });
+
+    try {
+      // Get connection details from backend
+      final connectionDetails = await _backendApi.getLiveKitConnectionDetails(
+        threadId: _threadId,
+        agentName: 'turiya-agent',
+      );
+
+      final serverUrl = connectionDetails['serverUrl'] as String;
+      final token = connectionDetails['participantToken'] as String;
+      final roomName = connectionDetails['roomName'] as String;
+
+      print('🎤 LiveKit: Connecting to room $roomName');
+
+      // Connect to room
+      final connected = await _liveKitService.connect(
+        serverUrl: serverUrl,
+        token: token,
+        roomName: roomName,
+      );
+
+      if (connected) {
+        // Enable microphone after connection
+        await _liveKitService.setMicrophoneEnabled(true);
+        if (mounted) {
+          setState(() {
+            _isRecording = true;
+          });
+          ToastUtils.showSuccess(context, 'Voice mode connected');
+        }
+      } else {
+        if (mounted) {
+          ToastUtils.showError(context, 'Failed to connect voice');
+        }
+      }
+    } catch (e) {
+      print('❌ LiveKit connection error: $e');
+      if (mounted) {
+        ToastUtils.showError(context, 'Voice connection failed');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLiveKitConnecting = false;
+        });
+      }
+    }
+  }
+
+  /// Disconnect from LiveKit room
+  Future<void> _disconnectFromLiveKit() async {
+    await _liveKitService.disconnect();
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _isLiveKitConnected = false;
+        _agentConnected = false;
+      });
+    }
+  }
+
+  /// Toggle between local STT mode and LiveKit mode
+  void _toggleVoiceMode() {
+    if (_isLiveKitConnected) {
+      // Disconnect first before switching
+      _disconnectFromLiveKit();
+    }
+
+    setState(() {
+      _isLiveKitMode = !_isLiveKitMode;
+    });
+
+    final mode =
+        _isLiveKitMode ? 'LiveKit (real-time)' : 'Local (speech-to-text)';
+    ToastUtils.showInfo(context, 'Voice mode: $mode');
+    print('🎤 Switched to voice mode: $mode');
   }
 
   void _stopAudio() {
@@ -1801,6 +2012,7 @@ class _MainScreenState extends State<_MainScreen>
     _chipAutoHideTimer?.cancel();
     _recordingAutoStopTimer?.cancel(); // Cancel recording auto-stop timer
     _removeRecordingIndicator();
+    _liveKitService.dispose(); // Clean up LiveKit
     super.dispose();
   }
 }

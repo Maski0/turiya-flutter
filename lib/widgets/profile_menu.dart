@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 import '../blocs/credits/credits_bloc.dart';
 import '../blocs/memory/memory_bloc.dart';
@@ -12,10 +13,14 @@ import '../utils/toast_utils.dart';
 /// Shows tabs: Profile, Settings, Billing, Memory
 class ProfileMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final bool isLiveKitMode;
+  final VoidCallback? onToggleVoiceMode;
 
   const ProfileMenu({
     super.key,
     required this.onClose,
+    this.isLiveKitMode = false,
+    this.onToggleVoiceMode,
   });
 
   @override
@@ -29,6 +34,8 @@ class _ProfileMenuState extends State<ProfileMenu> {
   // Settings state
   String _selectedLanguage = 'auto';
   bool _isLanguageDropdownOpen = false;
+  String _selectedTimeOfDay = 'auto'; // auto, morning, evening, night
+  bool _isTimeOfDayDropdownOpen = false;
 
   // Billing state
   bool _isManageDropdownOpen = false;
@@ -44,10 +51,13 @@ class _ProfileMenuState extends State<ProfileMenu> {
     return GestureDetector(
       onTap: () {
         // Close dropdowns when tapping outside
-        if (_isLanguageDropdownOpen || _isManageDropdownOpen) {
+        if (_isLanguageDropdownOpen ||
+            _isManageDropdownOpen ||
+            _isTimeOfDayDropdownOpen) {
           setState(() {
             _isLanguageDropdownOpen = false;
             _isManageDropdownOpen = false;
+            _isTimeOfDayDropdownOpen = false;
           });
         }
       },
@@ -395,6 +405,42 @@ class _ProfileMenuState extends State<ProfileMenu> {
 
         const SizedBox(height: 32),
 
+        // Time of Day setting
+        Text(
+          'Scene Ambience',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Auto-adjusts to your local time. Override here.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppTheme.tertiaryWhite,
+              ),
+        ),
+        const SizedBox(height: 16),
+        _buildTimeOfDayDropdown(),
+
+        const SizedBox(height: 32),
+
+        // Voice Mode setting
+        Text(
+          'Voice Mode',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          widget.isLiveKitMode
+              ? 'Real-time voice with LiveKit (lower latency)'
+              : 'Local speech-to-text (device STT)',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppTheme.tertiaryWhite,
+              ),
+        ),
+        const SizedBox(height: 16),
+        _buildVoiceModeToggle(),
+
+        const SizedBox(height: 32),
+
         // Clear history setting
         Text(
           'Clear conversation history',
@@ -499,6 +545,226 @@ class _ProfileMenuState extends State<ProfileMenu> {
             ),
           ),
       ],
+    );
+  }
+
+  final List<Map<String, String>> _timeOfDayOptions = [
+    {'name': 'Auto (Device Time)', 'value': 'auto', 'icon': '🕐'},
+    {'name': 'Morning', 'value': 'morning', 'icon': '🌅'},
+    {'name': 'Evening', 'value': 'evening', 'icon': '🌆'},
+    {'name': 'Night', 'value': 'night', 'icon': '🌙'},
+  ];
+
+  Widget _buildTimeOfDayDropdown() {
+    final selectedTime = _timeOfDayOptions.firstWhere(
+      (t) => t['value'] == _selectedTimeOfDay,
+      orElse: () => _timeOfDayOptions.first,
+    );
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isTimeOfDayDropdownOpen = !_isTimeOfDayDropdownOpen;
+              _isLanguageDropdownOpen = false;
+              _isManageDropdownOpen = false;
+            });
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0x14FFFFFF),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      selectedTime['icon']!,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      selectedTime['name']!,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.secondaryWhite,
+                          ),
+                    ),
+                  ],
+                ),
+                AnimatedRotation(
+                  turns: _isTimeOfDayDropdownOpen ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    color: AppTheme.secondaryWhite,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isTimeOfDayDropdownOpen)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: _timeOfDayOptions.map((time) {
+                final isSelected = time['value'] == _selectedTimeOfDay;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedTimeOfDay = time['value']!;
+                      _isTimeOfDayDropdownOpen = false;
+                    });
+                    _applyTimeOfDay(time['value']!);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.black : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          time['icon']!,
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          time['name']!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                color: isSelected ? Colors.white : Colors.black,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _applyTimeOfDay(String timeOfDay) {
+    try {
+      if (timeOfDay == 'auto') {
+        // Re-apply based on device clock
+        final hour = DateTime.now().hour;
+        if (hour >= 5 && hour < 17) {
+          sendToUnity("TimeOfDay", "SetMorning", "");
+        } else if (hour >= 17 && hour < 20) {
+          sendToUnity("TimeOfDay", "SetEvening", "");
+        } else {
+          sendToUnity("TimeOfDay", "SetNight", "");
+        }
+      } else {
+        switch (timeOfDay) {
+          case 'morning':
+            sendToUnity("TimeOfDay", "SetMorning", "");
+            break;
+          case 'evening':
+            sendToUnity("TimeOfDay", "SetEvening", "");
+            break;
+          case 'night':
+            sendToUnity("TimeOfDay", "SetNight", "");
+            break;
+        }
+      }
+      print('🌅 Time of day changed to: $timeOfDay');
+    } catch (e) {
+      print('Error setting time of day: $e');
+    }
+  }
+
+  Widget _buildVoiceModeToggle() {
+    return GestureDetector(
+      onTap: widget.onToggleVoiceMode,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0x14FFFFFF),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  widget.isLiveKitMode ? Icons.wifi : Icons.mic,
+                  color: widget.isLiveKitMode
+                      ? Colors.green
+                      : AppTheme.secondaryWhite,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  widget.isLiveKitMode ? 'LiveKit (Real-time)' : 'Local STT',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppTheme.secondaryWhite,
+                      ),
+                ),
+              ],
+            ),
+            Container(
+              width: 50,
+              height: 28,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: widget.isLiveKitMode
+                    ? Colors.green.withOpacity(0.3)
+                    : Colors.grey.withOpacity(0.3),
+              ),
+              child: Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    left: widget.isLiveKitMode ? 24 : 4,
+                    top: 4,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            widget.isLiveKitMode ? Colors.green : Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
