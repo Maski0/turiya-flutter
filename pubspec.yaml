@@ -41,7 +41,7 @@ dependencies:
   permission_handler: ^11.0.1
 
   # LiveKit for real-time voice
-  livekit_client: ^2.3.3
+  livekit_client: ^2.4.9
 
   # Widget Recording (record specific widget as MP4 video with audio)
   ffmpeg_kit_flutter_new: ^4.1.0

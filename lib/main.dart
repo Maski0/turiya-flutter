@@ -116,11 +116,11 @@ class _MainScreenState extends State<_MainScreen>
   late AudioStreamer _audioStreamer;
   late stt.SpeechToText _speechToText;
 
-  // LiveKit for real-time voice
+  // LiveKit for real-time voice (default for voice mode)
   final LiveKitService _liveKitService = LiveKitService();
-  bool _isLiveKitMode = false; // Toggle between local STT and LiveKit
   bool _isLiveKitConnected = false;
   bool _isLiveKitConnecting = false;
+  bool _isLiveKitDisconnecting = false;
   bool _agentConnected = false;
 
   bool _isGenerating = false;
@@ -251,7 +251,43 @@ class _MainScreenState extends State<_MainScreen>
     _liveKitService.onError = (error) {
       print('❌ LiveKit error: $error');
       if (mounted) {
-        ToastUtils.showError(context, 'Voice connection error');
+        // Only show error if not already disconnected
+        if (_isLiveKitConnected || _isLiveKitConnecting) {
+          setState(() {
+            _isLiveKitConnected = false;
+            _isLiveKitConnecting = false;
+            _isLiveKitDisconnecting = false;
+            _isGenerating = false;
+          });
+          ToastUtils.showError(context, 'Voice connection lost');
+        }
+      }
+    };
+
+    // Handle agent state changes (for avatar animation)
+    _liveKitService.onAgentStateChanged = (state) {
+      print('🤖 LiveKit: Agent state → $state');
+      if (mounted) {
+        setState(() {
+          // Map LiveKit agent state to our state variables
+          switch (state) {
+            case AgentState.thinking:
+              _isGenerating = true;
+              _isAudioPlaying = false;
+              break;
+            case AgentState.speaking:
+              _isGenerating = false;
+              _isAudioPlaying = true;
+              break;
+            case AgentState.listening:
+            case AgentState.disconnected:
+            case AgentState.connecting:
+              _isGenerating = false;
+              _isAudioPlaying = false;
+              break;
+          }
+        });
+        _updateUnityAvatarState();
       }
     };
   }
@@ -716,16 +752,22 @@ class _MainScreenState extends State<_MainScreen>
               // Don't reset generating flag during audio playback
               // (It will be reset after audio playback completes)
 
-              // Find any unplayed AI messages and play them
-              for (final message in state.messages) {
+              // Find the LAST unplayed AI message (most recent)
+              ChatMessage? unplayedMessage;
+              for (final message in state.messages.reversed) {
                 if (message.type == 'ai' && !message.isPlayed) {
-                  // Skip if we're already playing this message
-                  if (_currentlyPlayingMessageId == message.id) {
-                    print(
-                        '⏭️ Skipping - already playing message ${message.id}');
-                    break;
-                  }
+                  unplayedMessage = message;
+                  break; // Take the first one found (which is the last in original list)
+                }
+              }
 
+              if (unplayedMessage != null) {
+                final message = unplayedMessage;
+
+                // Skip if we're already playing this message
+                if (_currentlyPlayingMessageId == message.id) {
+                  print('⏭️ Skipping - already playing message ${message.id}');
+                } else {
                   print(
                       '✅ Sai Baba responded: ${message.content.substring(0, min(50, message.content.length))}...');
                   print('🎵 Playing TTS for message ID: ${message.id}');
@@ -891,11 +933,8 @@ class _MainScreenState extends State<_MainScreen>
 
                   // Refresh credits after message sent
                   context.read<CreditsBloc>().add(const CreditsRefreshed());
-
-                  // Only play one message at a time
-                  break;
                 }
-              }
+              } // End if (unplayedMessage != null)
             } else if (state is ChatError) {
               // Send END signal to Unity to clean up state
               try {
@@ -1387,6 +1426,10 @@ class _MainScreenState extends State<_MainScreen>
                               onStopAudio: _stopAudio,
                               showChatButton: !_showChatSidebar,
                               enabled: !_showLoginModal,
+                              isLiveKitConnected: _isLiveKitConnected,
+                              isLiveKitConnecting: _isLiveKitConnecting ||
+                                  _isLiveKitDisconnecting,
+                              onDisconnectLiveKit: _disconnectFromLiveKit,
                               onChatButtonTap: () {
                                 setState(() {
                                   _showChatSidebar = true;
@@ -1418,8 +1461,6 @@ class _MainScreenState extends State<_MainScreen>
                                 });
                               });
                             },
-                            isLiveKitMode: _isLiveKitMode,
-                            onToggleVoiceMode: _toggleVoiceMode,
                           ),
                         ),
 
@@ -1519,17 +1560,8 @@ class _MainScreenState extends State<_MainScreen>
       return;
     }
 
-    // Use LiveKit mode if enabled
-    if (_isLiveKitMode) {
-      await _toggleLiveKitVoice();
-    } else {
-      // Use local speech-to-text
-      if (_isRecording) {
-        _stopListening();
-      } else {
-        _startListening();
-      }
-    }
+    // Always use LiveKit for voice mode
+    await _toggleLiveKitVoice();
   }
 
   /// Toggle LiveKit voice mode (connect/disconnect and mic)
@@ -1540,22 +1572,10 @@ class _MainScreenState extends State<_MainScreen>
     }
 
     if (_isLiveKitConnected) {
-      // Toggle microphone if connected
-      if (_liveKitService.isMicrophoneEnabled) {
-        // Disable mic
-        await _liveKitService.setMicrophoneEnabled(false);
-        setState(() {
-          _isRecording = false;
-        });
-        print('🎤 LiveKit: Microphone disabled');
-      } else {
-        // Enable mic
-        await _liveKitService.setMicrophoneEnabled(true);
-        setState(() {
-          _isRecording = true;
-        });
-        print('🎤 LiveKit: Microphone enabled');
-      }
+      // Voice mode already active - mic button shouldn't be visible
+      // This function should only be called when not connected
+      print('⚠️ LiveKit: Already connected, use close button to disconnect');
+      return;
     } else {
       // Connect to LiveKit
       await _connectToLiveKit();
@@ -1572,7 +1592,7 @@ class _MainScreenState extends State<_MainScreen>
       // Get connection details from backend
       final connectionDetails = await _backendApi.getLiveKitConnectionDetails(
         threadId: _threadId,
-        agentName: 'turiya-agent',
+        agentName: 'krsna-agent',
       );
 
       final serverUrl = connectionDetails['serverUrl'] as String;
@@ -1581,21 +1601,24 @@ class _MainScreenState extends State<_MainScreen>
 
       print('🎤 LiveKit: Connecting to room $roomName');
 
-      // Connect to room
+      // Connect to room with thread/user context
       final connected = await _liveKitService.connect(
         serverUrl: serverUrl,
         token: token,
         roomName: roomName,
+        threadId: _threadId,
+        userId: _backendApi.getUserId(),
       );
 
       if (connected) {
         // Enable microphone after connection
         await _liveKitService.setMicrophoneEnabled(true);
+        print('🎤 LiveKit: Microphone enabled, ready to listen');
         if (mounted) {
           setState(() {
-            _isRecording = true;
+            _isLiveKitConnected = true;
+            _isLiveKitConnecting = false;
           });
-          ToastUtils.showSuccess(context, 'Voice mode connected');
         }
       } else {
         if (mounted) {
@@ -1616,34 +1639,45 @@ class _MainScreenState extends State<_MainScreen>
     }
   }
 
-  /// Disconnect from LiveKit room
+  /// Disconnect from LiveKit room or cancel connection attempt
   Future<void> _disconnectFromLiveKit() async {
+    // If connecting, cancel the connection attempt
+    if (_isLiveKitConnecting) {
+      print('🚫 Cancelling LiveKit connection...');
+      if (mounted) {
+        setState(() {
+          _isLiveKitConnecting = false;
+          _isLiveKitDisconnecting = false;
+        });
+      }
+      await _liveKitService.disconnect();
+      return;
+    }
+
+    // If already connected, disconnect
+    if (!_isLiveKitConnected) return;
+
+    if (mounted) {
+      setState(() {
+        _isLiveKitDisconnecting = true;
+      });
+    }
+
+    print('🔌 Disconnecting from LiveKit...');
     await _liveKitService.disconnect();
+
     if (mounted) {
       setState(() {
         _isRecording = false;
         _isLiveKitConnected = false;
+        _isLiveKitDisconnecting = false;
         _agentConnected = false;
       });
+      print('✅ LiveKit disconnected');
     }
   }
 
   /// Toggle between local STT mode and LiveKit mode
-  void _toggleVoiceMode() {
-    if (_isLiveKitConnected) {
-      // Disconnect first before switching
-      _disconnectFromLiveKit();
-    }
-
-    setState(() {
-      _isLiveKitMode = !_isLiveKitMode;
-    });
-
-    final mode =
-        _isLiveKitMode ? 'LiveKit (real-time)' : 'Local (speech-to-text)';
-    ToastUtils.showInfo(context, 'Voice mode: $mode');
-    print('🎤 Switched to voice mode: $mode');
-  }
 
   void _stopAudio() {
     _audioStreamer.cancel();
@@ -1695,7 +1729,9 @@ class _MainScreenState extends State<_MainScreen>
     // Clear input field immediately
     _textController.clear();
 
-    print('📨 Sending message via ChatBloc: $text');
+    // Always send text via HTTP (chat-chat mode)
+    // Voice-to-voice uses LiveKit, but text input always uses HTTP
+    print('📨 Sending text message via HTTP: $text');
 
     // Send message via ChatBloc - the BlocListener will handle the response
     context.read<ChatBloc>().add(ChatMessageSent(

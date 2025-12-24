@@ -19,6 +19,9 @@ class BottomInputBar extends StatefulWidget {
   final bool showChatButton;
   final VoidCallback? onChatButtonTap;
   final bool enabled;
+  final bool isLiveKitConnected;
+  final bool isLiveKitConnecting;
+  final VoidCallback? onDisconnectLiveKit;
 
   const BottomInputBar({
     super.key,
@@ -34,6 +37,9 @@ class BottomInputBar extends StatefulWidget {
     this.showChatButton = false,
     this.onChatButtonTap,
     this.enabled = true,
+    this.isLiveKitConnected = false,
+    this.isLiveKitConnecting = false,
+    this.onDisconnectLiveKit,
   });
 
   @override
@@ -178,9 +184,16 @@ class _BottomInputBarState extends State<BottomInputBar> {
                                           height: 1.25,
                                         ),
                                     decoration: InputDecoration(
-                                      hintText: widget.isGenerating
-                                          ? 'Pondering...'
-                                          : 'Ask what your heart seeks',
+                                      hintText: widget.isLiveKitConnecting &&
+                                              widget.isLiveKitConnected
+                                          ? 'Disconnecting...'
+                                          : widget.isLiveKitConnecting
+                                              ? 'Connecting...'
+                                              : widget.isGenerating
+                                                  ? 'Pondering...'
+                                                  : widget.isLiveKitConnected
+                                                      ? 'Speak what your heart seeks'
+                                                      : 'Ask what your heart seeks',
                                       // Use theme: titleLarge (18px)
                                       hintStyle: Theme.of(context)
                                           .textTheme
@@ -199,34 +212,56 @@ class _BottomInputBarState extends State<BottomInputBar> {
                                   ),
                                 ),
 
-                                // Mic button - disabled during generating/streaming
-                                GestureDetector(
-                                  onTap: (widget.isGenerating ||
-                                          widget.isAudioPlaying)
-                                      ? null
-                                      : widget.onMicTap,
-                                  onLongPress: (widget.isGenerating ||
-                                          widget.isAudioPlaying)
-                                      ? null
-                                      : widget.onMicLongPress,
-                                  child: Opacity(
-                                    opacity: (widget.isGenerating ||
+                                // Mic button - hidden when LiveKit is connected or connecting
+                                if (!widget.isLiveKitConnected &&
+                                    !widget.isLiveKitConnecting)
+                                  GestureDetector(
+                                    onTap: (widget.isGenerating ||
                                             widget.isAudioPlaying)
-                                        ? 0.3
-                                        : 1.0,
+                                        ? null
+                                        : widget.onMicTap,
+                                    onLongPress: (widget.isGenerating ||
+                                            widget.isAudioPlaying)
+                                        ? null
+                                        : widget.onMicLongPress,
+                                    child: Opacity(
+                                      opacity: (widget.isGenerating ||
+                                              widget.isAudioPlaying)
+                                          ? 0.3
+                                          : 1.0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: const MicIcon(size: 28),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Right button - dynamic based on state
+                                if (widget.isLiveKitConnected ||
+                                    widget.isLiveKitConnecting)
+                                  // LiveKit connected or connecting: show close button to disconnect/cancel
+                                  GestureDetector(
+                                    onTap: widget.onDisconnectLiveKit,
                                     child: Container(
-                                      padding: const EdgeInsets.all(4),
+                                      margin: const EdgeInsets.only(left: 12),
+                                      padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: Colors.transparent,
                                         borderRadius: BorderRadius.circular(20),
                                       ),
-                                      child: const MicIcon(size: 28),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
                                     ),
-                                  ),
-                                ),
-
-                                // Right button - dynamic based on state
-                                if (widget.isRecording)
+                                  )
+                                else if (widget.isRecording)
                                   // Recording: show check to submit
                                   GestureDetector(
                                     onTap: () => widget

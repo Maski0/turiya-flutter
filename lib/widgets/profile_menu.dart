@@ -13,14 +13,10 @@ import '../utils/toast_utils.dart';
 /// Shows tabs: Profile, Settings, Billing, Memory
 class ProfileMenu extends StatefulWidget {
   final VoidCallback onClose;
-  final bool isLiveKitMode;
-  final VoidCallback? onToggleVoiceMode;
 
   const ProfileMenu({
     super.key,
     required this.onClose,
-    this.isLiveKitMode = false,
-    this.onToggleVoiceMode,
   });
 
   @override
@@ -422,25 +418,6 @@ class _ProfileMenuState extends State<ProfileMenu> {
 
         const SizedBox(height: 32),
 
-        // Voice Mode setting
-        Text(
-          'Voice Mode',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          widget.isLiveKitMode
-              ? 'Real-time voice with LiveKit (lower latency)'
-              : 'Local speech-to-text (device STT)',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.tertiaryWhite,
-              ),
-        ),
-        const SizedBox(height: 16),
-        _buildVoiceModeToggle(),
-
-        const SizedBox(height: 32),
-
         // Clear history setting
         Text(
           'Clear conversation history',
@@ -696,76 +673,6 @@ class _ProfileMenuState extends State<ProfileMenu> {
     } catch (e) {
       print('Error setting time of day: $e');
     }
-  }
-
-  Widget _buildVoiceModeToggle() {
-    return GestureDetector(
-      onTap: widget.onToggleVoiceMode,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0x14FFFFFF),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  widget.isLiveKitMode ? Icons.wifi : Icons.mic,
-                  color: widget.isLiveKitMode
-                      ? Colors.green
-                      : AppTheme.secondaryWhite,
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  widget.isLiveKitMode ? 'LiveKit (Real-time)' : 'Local STT',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.secondaryWhite,
-                      ),
-                ),
-              ],
-            ),
-            Container(
-              width: 50,
-              height: 28,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: widget.isLiveKitMode
-                    ? Colors.green.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.3),
-              ),
-              child: Stack(
-                children: [
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
-                    left: widget.isLiveKitMode ? 24 : 4,
-                    top: 4,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color:
-                            widget.isLiveKitMode ? Colors.green : Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildClearHistoryButton() {

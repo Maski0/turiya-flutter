@@ -1,19 +1,56 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:flutter_embed_unity/flutter_embed_unity.dart';
+
+/// Agent state enum for UI updates
+enum AgentState {
+  disconnected,
+  connecting,
+  listening,
+  thinking,
+  speaking,
+}
+
+/// Check if agent is ready to accept messages
+bool isAgentAvailable(AgentState state) {
+  return state == AgentState.listening ||
+      state == AgentState.thinking ||
+      state == AgentState.speaking;
+}
 
 /// Service for managing LiveKit voice connections
 /// Handles real-time voice communication with the Krishna AI agent
+/// Streams PCM audio to Unity for lip-sync
 class LiveKitService {
   Room? _room;
   LocalParticipant? _localParticipant;
-  RemoteParticipant? _remoteParticipant;
   EventsListener<RoomEvent>? _roomListener;
 
   // Audio handling
   LocalAudioTrack? _localAudioTrack;
   bool _isMicrophoneEnabled = false;
+
+  // Agent state tracking
+  AgentState _currentState = AgentState.disconnected;
+  bool _isAgentConnected = false;
+  String? _agentIdentity;
+
+  // Message buffering (like web frontend)
+  final List<String> _messageBuffer = [];
+
+  // Audio playback tracking
+  int _totalAudioBytes = 0;
+  Timer? _audioPlaybackTimer;
+  String? _activeRespondingAgent;
+
+  // Timeouts
+  Timer? _thinkingTimeout;
+  Timer? _connectingTimeout;
+  static const Duration _thinkingTimeoutDuration = Duration(seconds: 30);
+  static const Duration _connectingTimeoutDuration = Duration(seconds: 15);
 
   // Callbacks
   Function(Uint8List audioData)? onAudioReceived;
@@ -22,28 +59,46 @@ class LiveKitService {
   Function()? onAgentConnected;
   Function()? onAgentDisconnected;
   Function(bool isSpeaking)? onAgentSpeakingChanged;
+  Function(String message)? onMessageReceived;
+  Function(String transcription)? onUserTranscription;
+  Function(AgentState state)? onAgentStateChanged;
 
-  // State
+  // State getters
   bool get isConnected => _room?.connectionState == ConnectionState.connected;
   bool get isMicrophoneEnabled => _isMicrophoneEnabled;
-  String? _currentRoomName;
+  AgentState get currentState => _currentState;
+  bool get isAgentConnected => _isAgentConnected;
+  String? get agentIdentity => _agentIdentity;
+  bool get isAgentReady => isAgentAvailable(_currentState);
+  Room? get room => _room;
 
   /// Connect to LiveKit room with the provided connection details
   Future<bool> connect({
     required String serverUrl,
     required String token,
     required String roomName,
+    String? threadId,
+    String? userId,
   }) async {
     try {
+      _updateState(AgentState.connecting);
       onConnectionStateChanged?.call('connecting');
 
-      // Create room with options
+      // Create room with audio options
       _room = Room(
         roomOptions: const RoomOptions(
           adaptiveStream: true,
           dynacast: true,
           defaultAudioPublishOptions: AudioPublishOptions(
-            audioBitrate: AudioPresets.music.maxBitrate,
+            name: 'user_audio',
+          ),
+          defaultAudioCaptureOptions: AudioCaptureOptions(
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          ),
+          defaultAudioOutputOptions: AudioOutputOptions(
+            speakerOn: true,
           ),
         ),
       );
@@ -61,15 +116,55 @@ class LiveKitService {
       );
 
       _localParticipant = _room!.localParticipant;
-      _currentRoomName = roomName;
 
-      onConnectionStateChanged?.call('connected');
-      debugPrint('🎤 LiveKit: Connected to room $roomName');
+      // Set participant attributes for thread/user tracking
+      // Agent uses these to maintain conversation context
+      if (threadId != null || userId != null) {
+        final attributes = <String, String>{};
+        if (threadId != null) attributes['thread_id'] = threadId;
+        if (userId != null) attributes['user_id'] = userId;
+        _localParticipant?.setAttributes(attributes);
+        debugPrint('✅ Set participant attributes: $attributes');
+      }
+
+      // Mic defaults to disabled
+      await setMicrophoneEnabled(false);
+
+      debugPrint('✅ LiveKit: Connected to room $roomName');
+      debugPrint('⏳ Waiting for agent to join the room...');
+
+      // Check if agent is already in room
+      for (final participant in _room!.remoteParticipants.values) {
+        if (_isAgent(participant)) {
+          debugPrint('🤖 Agent already in room: ${participant.identity}');
+          _isAgentConnected = true;
+          _agentIdentity = participant.identity;
+          _connectingTimeout?.cancel();
+          _updateState(AgentState.listening);
+          onConnectionStateChanged?.call('connected');
+          onAgentConnected?.call();
+          return true;
+        }
+      }
+
+      // Start connecting timeout
+      _connectingTimeout?.cancel();
+      _connectingTimeout = Timer(_connectingTimeoutDuration, () {
+        if (_currentState == AgentState.connecting && !_isAgentConnected) {
+          debugPrint(
+              '⏰ Connection timeout! Agent did not join in ${_connectingTimeoutDuration.inSeconds}s');
+          onError?.call('Connection timeout - agent not available');
+          _updateState(AgentState.disconnected);
+          onConnectionStateChanged?.call('disconnected');
+        }
+      });
 
       return true;
     } catch (e) {
       debugPrint('❌ LiveKit connection error: $e');
+      _connectingTimeout?.cancel();
       onError?.call('Failed to connect: $e');
+      _updateState(AgentState.disconnected);
       onConnectionStateChanged?.call('disconnected');
       return false;
     }
@@ -82,41 +177,9 @@ class LiveKitService {
     _roomListener!
       ..on<RoomDisconnectedEvent>((event) {
         debugPrint('🔌 LiveKit: Disconnected from room');
+        _updateState(AgentState.disconnected);
         onConnectionStateChanged?.call('disconnected');
         _cleanup();
-      })
-      ..on<ParticipantConnectedEvent>((event) {
-        debugPrint(
-            '👤 LiveKit: Participant connected: ${event.participant.identity}');
-        // Check if this is the agent
-        if (_isAgent(event.participant)) {
-          _remoteParticipant = event.participant;
-          onAgentConnected?.call();
-          _subscribeToAgentTracks(event.participant);
-        }
-      })
-      ..on<ParticipantDisconnectedEvent>((event) {
-        debugPrint(
-            '👤 LiveKit: Participant disconnected: ${event.participant.identity}');
-        if (_isAgent(event.participant)) {
-          _remoteParticipant = null;
-          onAgentDisconnected?.call();
-        }
-      })
-      ..on<TrackSubscribedEvent>((event) {
-        debugPrint('🎵 LiveKit: Track subscribed: ${event.track.kind}');
-        if (event.track.kind == TrackType.AUDIO &&
-            _isAgent(event.participant)) {
-          _handleAgentAudioTrack(event.track as RemoteAudioTrack);
-        }
-      })
-      ..on<TrackUnsubscribedEvent>((event) {
-        debugPrint('🎵 LiveKit: Track unsubscribed: ${event.track.kind}');
-      })
-      ..on<ActiveSpeakersChangedEvent>((event) {
-        // Check if agent is speaking
-        final agentSpeaking = event.speakers.any((p) => _isAgent(p));
-        onAgentSpeakingChanged?.call(agentSpeaking);
       })
       ..on<RoomReconnectingEvent>((event) {
         debugPrint('🔄 LiveKit: Reconnecting...');
@@ -125,81 +188,270 @@ class LiveKitService {
       ..on<RoomReconnectedEvent>((event) {
         debugPrint('✅ LiveKit: Reconnected');
         onConnectionStateChanged?.call('connected');
+      })
+      ..on<ParticipantConnectedEvent>((event) {
+        debugPrint(
+            '👤 LiveKit: Participant connected: ${event.participant.identity}');
+        if (_isAgent(event.participant)) {
+          debugPrint('🤖 Agent connected!');
+          _isAgentConnected = true;
+          _agentIdentity = event.participant.identity;
+          _connectingTimeout?.cancel();
+          _updateState(AgentState.listening);
+          onConnectionStateChanged?.call('connected');
+          onAgentConnected?.call();
+        }
+      })
+      ..on<ParticipantDisconnectedEvent>((event) {
+        debugPrint(
+            '👤 LiveKit: Participant disconnected: ${event.participant.identity}');
+        if (_isAgent(event.participant)) {
+          _isAgentConnected = false;
+          _agentIdentity = null;
+          onAgentDisconnected?.call();
+        }
+      })
+      ..on<ParticipantAttributesChanged>((event) {
+        // Handle agent state changes via lk.agent.state attribute
+        if (_isAgent(event.participant)) {
+          final agentState = event.participant.attributes['lk.agent.state'];
+          debugPrint(
+              '🤖 Agent attribute changed: lk.agent.state = $agentState');
+          if (agentState != null) {
+            switch (agentState) {
+              case 'thinking':
+                _updateState(AgentState.thinking);
+                break;
+              case 'speaking':
+                _updateState(AgentState.speaking);
+                break;
+              case 'listening':
+                _updateState(AgentState.listening);
+                break;
+            }
+          }
+        }
+      })
+      ..on<DataReceivedEvent>((event) {
+        _handleDataReceived(event);
+      })
+      ..on<TrackSubscribedEvent>((event) async {
+        debugPrint(
+            '🎵 LiveKit: Track subscribed: ${event.track.kind} from ${event.participant.identity}');
+        // Stop WebRTC audio playback - Unity plays audio via PCM data channel
+        if (event.track is RemoteAudioTrack && _isAgent(event.participant)) {
+          try {
+            final audioTrack = event.track as RemoteAudioTrack;
+            await audioTrack.stop();
+            debugPrint(
+                '✅ Stopped WebRTC audio track - Unity will play via PCM');
+          } catch (e) {
+            debugPrint('⚠️ Error stopping audio track: $e');
+          }
+        }
+      })
+      ..on<TrackPublishedEvent>((event) async {
+        // Unsubscribe from audio tracks to prevent WebRTC audio
+        if (event.publication.kind == TrackType.AUDIO) {
+          debugPrint(
+              '🔇 Audio track published - unsubscribing from WebRTC audio');
+          try {
+            await event.publication.unsubscribe();
+          } catch (e) {
+            debugPrint('⚠️ Error unsubscribing: $e');
+          }
+        }
+      })
+      ..on<ActiveSpeakersChangedEvent>((event) {
+        bool isAgentSpeaking = false;
+        bool isUserSpeaking = false;
+
+        for (final p in event.speakers) {
+          if (p is RemoteParticipant && _isAgent(p)) {
+            isAgentSpeaking = true;
+          } else if (p is LocalParticipant) {
+            isUserSpeaking = true;
+          }
+        }
+
+        if (isAgentSpeaking && !isUserSpeaking) {
+          _updateState(AgentState.speaking);
+          onAgentSpeakingChanged?.call(true);
+        } else if (isUserSpeaking && _currentState == AgentState.speaking) {
+          // User interrupted - handle it
+          debugPrint('🛑 User interruption detected');
+          _handleInterruption();
+        } else if (!isAgentSpeaking && !isUserSpeaking) {
+          final micEnabled = _isMicrophoneEnabled;
+          if (micEnabled && _currentState == AgentState.listening) {
+            debugPrint('🤔 User stopped speaking - agent is thinking...');
+            _updateState(AgentState.thinking);
+          }
+          onAgentSpeakingChanged?.call(false);
+        }
+      })
+      ..on<TranscriptionEvent>((event) {
+        // Handle transcriptions from both user and agent
+        if (event.participant is LocalParticipant) {
+          // User's speech-to-text (show in input field)
+          for (final segment in event.segments) {
+            final text = segment.text.trim();
+            if (text.isNotEmpty) {
+              debugPrint('🎤 User transcription: "$text"');
+              onUserTranscription?.call(text);
+            }
+          }
+        } else if (event.participant is RemoteParticipant &&
+            _isAgent(event.participant)) {
+          // Agent's speech-to-text (for chat history)
+          for (final segment in event.segments) {
+            final text = segment.text.trim();
+            if (text.isNotEmpty && segment.isFinal) {
+              debugPrint('🤖 Agent transcription: "$text"');
+              onMessageReceived?.call(text);
+            }
+          }
+        }
       });
 
-    // Check for existing participants (agent might already be in room)
+    // Check for existing participants
     for (final participant in _room!.remoteParticipants.values) {
       if (_isAgent(participant)) {
-        _remoteParticipant = participant;
+        _isAgentConnected = true;
+        _agentIdentity = participant.identity;
+        _connectingTimeout?.cancel();
+        _updateState(AgentState.listening);
         onAgentConnected?.call();
-        _subscribeToAgentTracks(participant);
         break;
       }
     }
   }
 
-  /// Check if participant is the AI agent
-  bool _isAgent(Participant participant) {
-    // Agent identity usually contains 'agent' or is not a UUID
-    final identity = participant.identity;
-    return identity.contains('agent') ||
-        identity.startsWith('turiya') ||
-        !_isUuid(identity);
-  }
+  /// Handle incoming data messages
+  void _handleDataReceived(DataReceivedEvent event) {
+    final topic = event.topic;
+    final participantIdentity = event.participant?.identity ?? 'unknown';
 
-  bool _isUuid(String str) {
-    final uuidRegex = RegExp(
-      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-      caseSensitive: false,
-    );
-    return uuidRegex.hasMatch(str);
-  }
+    debugPrint(
+        '📨 Data received - Topic: $topic, From: $participantIdentity, Length: ${event.data.length}');
 
-  /// Subscribe to agent's audio tracks
-  void _subscribeToAgentTracks(RemoteParticipant participant) {
-    for (final trackPub in participant.audioTrackPublications) {
-      if (trackPub.track != null) {
-        _handleAgentAudioTrack(trackPub.track as RemoteAudioTrack);
+    // Handle chat messages (text responses)
+    if (topic == 'lk.chat' || topic == 'chat') {
+      try {
+        final data = utf8.decode(event.data);
+        debugPrint('📩 Chat message: $data');
+        onMessageReceived?.call(data);
+      } catch (e) {
+        debugPrint('❌ Error decoding chat message: $e');
       }
+    }
+    // Handle PCM audio for Unity lip-sync
+    else if (topic == 'audio_pcm') {
+      final audioData = event.data is Uint8List
+          ? event.data as Uint8List
+          : Uint8List.fromList(event.data);
+      _handleAudioPcm(audioData, participantIdentity);
     }
   }
 
-  /// Handle incoming audio from agent
-  void _handleAgentAudioTrack(RemoteAudioTrack track) {
-    debugPrint('🔊 LiveKit: Handling agent audio track');
-    // The audio will be played automatically by LiveKit
-    // For Unity integration, we need to capture the raw audio
-    // This is handled by the AudioFrame listener
+  /// Handle PCM audio chunks for Unity lip-sync
+  void _handleAudioPcm(Uint8List data, String senderIdentity) {
+    try {
+      final dataStr = utf8.decode(data);
+
+      debugPrint(
+          '🎵 Audio PCM from: $senderIdentity, data: ${dataStr.length > 20 ? dataStr.substring(0, 20) + "..." : dataStr}');
+
+      // Only process from agents
+      if (!senderIdentity.contains('agent') &&
+          !senderIdentity.startsWith('turiya')) {
+        debugPrint('⚠️ Ignoring audio from non-agent: $senderIdentity');
+        return;
+      }
+
+      // Lock onto first responding agent
+      if (dataStr == 'START') {
+        if (_activeRespondingAgent == null) {
+          _activeRespondingAgent = senderIdentity;
+          debugPrint('🎯 Locked onto agent: $senderIdentity');
+        } else if (_activeRespondingAgent != senderIdentity) {
+          return; // Ignore other agents
+        }
+        _totalAudioBytes = 0;
+        _audioPlaybackTimer?.cancel();
+        if (_currentState != AgentState.speaking) {
+          _updateState(AgentState.speaking);
+        }
+      } else if (_activeRespondingAgent != null &&
+          senderIdentity != _activeRespondingAgent) {
+        return; // Ignore other agents
+      }
+
+      // Forward to Unity for lip-sync
+      sendToUnity("Flutter", "OnAudioChunk", dataStr);
+
+      if (dataStr.startsWith('CHUNK|')) {
+        final base64Data = dataStr.substring(6);
+        try {
+          final bytes = base64Decode(base64Data);
+          _totalAudioBytes += bytes.length;
+        } catch (_) {}
+      } else if (dataStr.startsWith('END|') || dataStr == 'END') {
+        final totalBytes = dataStr.startsWith('END|')
+            ? int.tryParse(dataStr.substring(4)) ?? _totalAudioBytes
+            : _totalAudioBytes;
+
+        debugPrint('🏁 Audio END - $totalBytes bytes');
+
+        // Calculate playback duration
+        const int sampleRate = 22050;
+        const int bytesPerSample = 2;
+        final totalSamples = totalBytes ~/ bytesPerSample;
+        final audioDurationSeconds = totalSamples / sampleRate;
+
+        // Timer to transition to listening after playback
+        final playbackDuration =
+            Duration(milliseconds: (audioDurationSeconds * 1000).toInt() + 500);
+
+        _audioPlaybackTimer = Timer(playbackDuration, () {
+          debugPrint('🎵 Playback finished - transitioning to listening');
+          _activeRespondingAgent = null;
+          if (_currentState == AgentState.speaking) {
+            _updateState(AgentState.listening);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error processing PCM audio: $e');
+    }
+  }
+
+  /// Check if participant is the AI agent
+  bool _isAgent(Participant participant) {
+    final identity = participant.identity;
+    return identity.contains('agent') || identity.startsWith('turiya');
   }
 
   /// Enable/disable microphone
   Future<void> setMicrophoneEnabled(bool enabled) async {
-    if (_localParticipant == null) {
+    if (_room == null || _localParticipant == null) {
       debugPrint('⚠️ LiveKit: Cannot set mic - not connected');
       return;
     }
 
     try {
-      if (enabled && _localAudioTrack == null) {
-        // Create and publish audio track
-        _localAudioTrack = await LocalAudioTrack.create(
-          AudioCaptureOptions(
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          ),
-        );
-        await _localParticipant!.publishAudioTrack(_localAudioTrack!);
-        debugPrint('🎤 LiveKit: Microphone enabled and published');
-      } else if (!enabled && _localAudioTrack != null) {
-        // Unpublish and dispose audio track
-        await _localParticipant!.unpublishTrack(_localAudioTrack!.sid);
-        await _localAudioTrack!.dispose();
-        _localAudioTrack = null;
-        debugPrint('🎤 LiveKit: Microphone disabled');
-      }
-
+      debugPrint('🎤 LiveKit: Setting microphone to $enabled...');
+      await _localParticipant!.setMicrophoneEnabled(enabled);
       _isMicrophoneEnabled = enabled;
+      debugPrint('✅ LiveKit: Microphone ${enabled ? "enabled" : "disabled"}');
+      debugPrint(
+          '📊 LiveKit: Local tracks count: ${_localParticipant!.trackPublications.length}');
+
+      // Log all local tracks
+      for (final pub in _localParticipant!.trackPublications.values) {
+        debugPrint(
+            '   Track: ${pub.kind} - ${pub.source} - subscribed: ${pub.subscribed}');
+      }
     } catch (e) {
       debugPrint('❌ LiveKit: Microphone error: $e');
       onError?.call('Microphone error: $e');
@@ -211,30 +463,120 @@ class LiveKitService {
     await setMicrophoneEnabled(!_isMicrophoneEnabled);
   }
 
-  /// Send data to the agent via data channel
-  Future<void> sendData(String data) async {
+  /// Send text message via LiveKit (for chat-audio mode)
+  Future<void> sendMessage(String text) async {
     if (_room == null || !isConnected) {
-      debugPrint('⚠️ LiveKit: Cannot send data - not connected');
+      debugPrint('⚠️ LiveKit: Cannot send message - not connected');
       return;
     }
 
+    if (isAgentReady) {
+      await _sendMessageInternal(text);
+    } else {
+      debugPrint('⏳ Agent not ready, buffering message');
+      _messageBuffer.add(text);
+    }
+  }
+
+  Future<void> _sendMessageInternal(String text) async {
     try {
-      await _localParticipant?.publishData(
-        Uint8List.fromList(data.codeUnits),
+      debugPrint('📤 Sending text via LiveKit: "$text"');
+      await _localParticipant?.sendText(
+        text,
+        options: SendTextOptions(topic: 'lk.chat'),
+      );
+      debugPrint('✅ Text sent via LiveKit');
+    } catch (e) {
+      debugPrint('❌ Error sending text: $e');
+      rethrow;
+    }
+  }
+
+  /// Process buffered messages when agent becomes ready
+  Future<void> _processMessageBuffer() async {
+    if (!isAgentReady || _messageBuffer.isEmpty) return;
+
+    debugPrint(
+        '📬 Agent ready! Processing ${_messageBuffer.length} buffered message(s)');
+    final bufferedMessages = List<String>.from(_messageBuffer);
+    _messageBuffer.clear();
+
+    for (final message in bufferedMessages) {
+      try {
+        await _sendMessageInternal(message);
+      } catch (e) {
+        debugPrint('❌ Error sending buffered message: $e');
+      }
+    }
+  }
+
+  /// Send interrupt command to agent
+  Future<void> sendInterrupt() async {
+    if (_room == null || _localParticipant == null) return;
+
+    try {
+      await _localParticipant!.publishData(
+        Uint8List.fromList(utf8.encode('interrupt')),
+        topic: 'interrupt',
         reliable: true,
       );
-      debugPrint('📤 LiveKit: Sent data to room');
+      debugPrint('🛑 Sent interrupt command');
     } catch (e) {
-      debugPrint('❌ LiveKit: Send data error: $e');
+      debugPrint('⚠️ Failed to send interrupt: $e');
+    }
+  }
+
+  /// Handle user interruption
+  Future<void> _handleInterruption() async {
+    _audioPlaybackTimer?.cancel();
+    _activeRespondingAgent = null;
+
+    // Stop Unity audio
+    sendToUnity("Flutter", "OnAudioChunk", "END");
+
+    // Send interrupt to agent
+    await sendInterrupt();
+
+    _updateState(AgentState.listening);
+    onAgentSpeakingChanged?.call(false);
+  }
+
+  /// Update agent state
+  void _updateState(AgentState state) {
+    final oldState = _currentState;
+    _currentState = state;
+    onAgentStateChanged?.call(state);
+
+    debugPrint('🤖 Agent state: $oldState → $state');
+
+    // Process buffered messages when agent becomes ready
+    if (!isAgentAvailable(oldState) && isAgentAvailable(state)) {
+      _processMessageBuffer();
+    }
+
+    // Handle timeouts
+    _thinkingTimeout?.cancel();
+    if (state == AgentState.thinking) {
+      _thinkingTimeout = Timer(_thinkingTimeoutDuration, () {
+        if (_currentState == AgentState.thinking) {
+          debugPrint('⏰ Thinking timeout!');
+          onError?.call('Response timeout - please try again');
+          _updateState(AgentState.listening);
+        }
+      });
     }
   }
 
   /// Disconnect from the room
   Future<void> disconnect() async {
     debugPrint('🔌 LiveKit: Disconnecting...');
+    _connectingTimeout?.cancel();
+    _thinkingTimeout?.cancel();
+    _audioPlaybackTimer?.cancel();
     await _cleanup();
     await _room?.disconnect();
     _room = null;
+    _updateState(AgentState.disconnected);
     onConnectionStateChanged?.call('disconnected');
   }
 
@@ -246,13 +588,19 @@ class LiveKitService {
     }
     _isMicrophoneEnabled = false;
     _localParticipant = null;
-    _remoteParticipant = null;
+    _isAgentConnected = false;
+    _agentIdentity = null;
+    _activeRespondingAgent = null;
+    _messageBuffer.clear();
     _roomListener?.dispose();
     _roomListener = null;
   }
 
   /// Dispose the service
   void dispose() {
+    _connectingTimeout?.cancel();
+    _thinkingTimeout?.cancel();
+    _audioPlaybackTimer?.cancel();
     disconnect();
   }
 }
