@@ -1,4 +1,4 @@
-package com.turiya.now
+package app.turiya.now
 
 import com.learntoflutter.flutter_embed_unity_android.unity.FakeUnityPlayerActivity
 
