@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:ui';
+import 'onboarding/onboarding_gate.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,7 @@ import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'elevenlabs_service.dart';
@@ -94,9 +97,43 @@ class ExampleApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: const _MainScreen(),
+        home: const _AppInitializer(
+          child: OnboardingGate(
+            child: _MainScreen(),
+          ),
+        ),
       ),
     );
+  }
+}
+
+/// Initializes app-wide services like background audio
+class _AppInitializer extends StatefulWidget {
+  final Widget child;
+
+  const _AppInitializer({required this.child});
+
+  @override
+  State<_AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends State<_AppInitializer> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize background audio immediately when app starts
+    _initBackgroundAudio();
+  }
+
+  Future<void> _initBackgroundAudio() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await BackgroundAudioService().initialize();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
 
@@ -188,20 +225,49 @@ class _MainScreenState extends State<_MainScreen>
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
 
-    // Initialize and start background music
-    _initBackgroundAudio();
+    // Initialize app-specific services (audio is now initialized in _AppInitializer)
+    _initServices();
   }
 
-  /// Initialize background audio after first frame renders
-  Future<void> _initBackgroundAudio() async {
+  /// Initialize main screen services after first frame renders
+  Future<void> _initServices() async {
     // Wait for first frame to ensure app is ready
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await BackgroundAudioService().initialize();
       // Apply time of day after Unity loads (with delay)
       _applyTimeOfDayFromClock();
       // Setup LiveKit callbacks
       _setupLiveKitCallbacks();
+      // Sync onboarding data to backend if user is authenticated
+      _syncOnboardingDataIfNeeded();
     });
+  }
+
+  /// Check local storage for onboarding data and sync to backend if authenticated
+  Future<void> _syncOnboardingDataIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final onboardingDataJson = prefs.getString('onboarding_data');
+
+      // If onboarding data exists in local storage and user is authenticated, push to backend
+      if (onboardingDataJson != null && _backendApi.isAuthenticated()) {
+        print('📤 Pushing onboarding data to backend...');
+
+        try {
+          final onboardingData = jsonDecode(onboardingDataJson);
+          await _backendApi.saveOnboardingData(onboardingData: onboardingData);
+
+          // Delete from local storage after successful sync
+          await prefs.remove('onboarding_data');
+          print(
+              '✅ Onboarding data pushed to backend and removed from local storage');
+        } catch (e) {
+          print('❌ Failed to push onboarding data: $e');
+          // Keep in local storage, will retry next time
+        }
+      }
+    } catch (e) {
+      print('Error syncing onboarding data: $e');
+    }
   }
 
   /// Setup LiveKit service callbacks

@@ -294,4 +294,26 @@ class BackendApiService {
           'Failed to get LiveKit connection: ${response.statusCode} - ${response.body}');
     }
   }
+
+  /// Push onboarding data to backend (just logs, no storage yet)
+  Future<void> saveOnboardingData({
+    required Map<String, dynamic> onboardingData,
+  }) async {
+    final token = getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/onboarding/save'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(onboardingData),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to save onboarding data: ${response.statusCode} - ${response.body}');
+    }
+  }
 }
