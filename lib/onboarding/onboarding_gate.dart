@@ -26,12 +26,13 @@ class _OnboardingGateState extends State<OnboardingGate> {
   }
 
   Future<void> _checkOnboardingStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final completed = prefs.getBool('onboarding_completed') ?? false;
+    // TODO: REVERT THIS - Always show onboarding for testing
+    // final prefs = await SharedPreferences.getInstance();
+    // final completed = prefs.getBool('onboarding_completed') ?? false;
 
     if (mounted) {
       setState(() {
-        _hasCompletedOnboarding = completed;
+        _hasCompletedOnboarding = false; // Always show onboarding for testing
         _isLoading = false;
       });
     }

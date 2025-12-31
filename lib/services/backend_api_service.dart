@@ -295,7 +295,30 @@ class BackendApiService {
     }
   }
 
-  /// Push onboarding data to backend (just logs, no storage yet)
+  /// Get custom plan based on onboarding data (no auth required)
+  /// Returns the plan data (array of cards) from the API response
+  Future<List<dynamic>?> getOnboardingPlan({
+    required Map<String, dynamic> onboardingData,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/onboarding/plan'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(onboardingData),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to get onboarding plan: ${response.statusCode} - ${response.body}');
+    }
+
+    final body = jsonDecode(response.body);
+    return body['plan'] as List<dynamic>?;
+  }
+
+  /// Save onboarding data to backend (auth required)
+  /// Called after user logs in to persist their onboarding selections
   Future<void> saveOnboardingData({
     required Map<String, dynamic> onboardingData,
   }) async {

@@ -183,6 +183,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         currentStep != 13;
   }
 
+  bool _shouldShowHeader() {
+    // Hide header (back button + progress bar) only for Completion screen (loading + results)
+    return currentStep < 13;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Special case: Splash screen doesn't use the page view wrapper
@@ -201,6 +206,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       child: OnboardingPageView(
         progress: _getProgress(),
         showBackButton: _shouldShowBackButton(),
+        showHeader: _shouldShowHeader(),
         onBack: _previousStep,
         childKey: ValueKey(currentStep),
         child: _getCurrentScreen(),

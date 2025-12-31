@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../theme/onboarding_theme.dart';
 import '../widgets/onboarding_button.dart';
 import '../models/onboarding_data.dart';
+import '../../services/backend_api_service.dart';
 
 /// Screen 22-24: Completion and plan ready
 class CompletionScreen extends StatefulWidget {
@@ -22,10 +23,17 @@ class CompletionScreen extends StatefulWidget {
 }
 
 class _CompletionScreenState extends State<CompletionScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool isLoading = true;
+  bool _isExiting = false;
   late AnimationController _progressController;
   late Animation<double> _progressAnimation;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  // Plan data from API (array of cards)
+  List<dynamic>? _planData;
+  final BackendApiService _apiService = BackendApiService();
 
   @override
   void initState() {
@@ -41,19 +49,39 @@ class _CompletionScreenState extends State<CompletionScreen>
       CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
     );
 
+    // Fade out animation for exit
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+
     // Start animation and save onboarding data
     _progressController.forward();
     _saveOnboardingData();
   }
 
+  Future<void> _handleComplete() async {
+    if (_isExiting) return;
+
+    setState(() {
+      _isExiting = true;
+    });
+
+    // Fade out
+    await _fadeController.forward();
+
+    // Then complete
+    widget.onComplete();
+  }
+
   Future<void> _saveOnboardingData() async {
     if (widget.data == null) {
       await Future.delayed(const Duration(seconds: 3));
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      await _transitionToPlanReady();
       return;
     }
 
@@ -69,33 +97,58 @@ class _CompletionScreenState extends State<CompletionScreen>
         'daily_practices': widget.data!.dailyPractices,
       };
 
-      // Save to local storage
+      // Save to local storage (for later sync after login)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('onboarding_data', jsonEncode(onboardingData));
       print('✅ Onboarding data saved to local storage');
 
-      // Wait for animation
+      // Get custom plan from API (no auth required)
+      try {
+        final plan = await _apiService.getOnboardingPlan(
+          onboardingData: onboardingData,
+        );
+        if (plan != null && mounted) {
+          setState(() {
+            _planData = plan;
+          });
+        }
+        print('✅ Custom plan received from API');
+      } catch (e) {
+        print('⚠️ Plan API call failed: $e');
+      }
+
+      // Wait for progress animation to complete
       await Future.delayed(const Duration(seconds: 3));
 
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      // Transition to plan ready with fade
+      await _transitionToPlanReady();
     } catch (e) {
-      print('❌ Error saving onboarding data: $e');
+      print('❌ Error during onboarding completion: $e');
       await Future.delayed(const Duration(seconds: 3));
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      await _transitionToPlanReady();
     }
+  }
+
+  Future<void> _transitionToPlanReady() async {
+    if (!mounted) return;
+
+    // Fade out loading screen
+    await _fadeController.forward();
+    if (!mounted) return;
+
+    // Switch to plan ready state
+    setState(() {
+      isLoading = false;
+    });
+
+    // Fade in plan ready screen
+    await _fadeController.reverse();
   }
 
   @override
   void dispose() {
     _progressController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
@@ -103,209 +156,236 @@ class _CompletionScreenState extends State<CompletionScreen>
   Widget build(BuildContext context) {
     // Return content only - wrapper handles scaffold
     if (isLoading) {
-      // Loading state (Screen 22-23)
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Logo
-          SizedBox(
-            width: 123,
-            height: 156.3,
-            child: SvgPicture.asset(
-              'assets/images/onboarding/logo.svg',
-              fit: BoxFit.contain,
-            ),
-          ),
-          const SizedBox(height: 40),
-          // Loading text
-          Text(
-            'Shaping a path just for you',
-            style: OnboardingTheme.headingMedium.copyWith(fontSize: 24),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Preparing your practice flow…',
-            style: OnboardingTheme.bodyMedium.copyWith(
-              fontSize: 16,
-              color: OnboardingTheme.textPrimary.withOpacity(0.7),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 40),
-          // Deterministic loading bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: AnimatedBuilder(
-                animation: _progressAnimation,
-                builder: (context, child) {
-                  return LinearProgressIndicator(
-                    value: _progressAnimation.value, // Deterministic progress
-                    backgroundColor: OnboardingTheme.progressBar,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      OnboardingTheme.progressBarFill,
-                    ),
-                  );
-                },
+      // Loading state
+      return FadeTransition(
+        opacity: _fadeAnimation,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Logo
+            SizedBox(
+              width: 123,
+              height: 156.3,
+              child: SvgPicture.asset(
+                'assets/images/onboarding/logo.svg',
+                fit: BoxFit.contain,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 40),
+            // Loading text
+            Text(
+              'Shaping a path just for you',
+              style: OnboardingTheme.headingMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Preparing your practice flow…',
+              style: OnboardingTheme.bodyMedium.copyWith(
+                color: OnboardingTheme.textPrimary.withOpacity(0.7),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
+            // Deterministic loading bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: AnimatedBuilder(
+                  animation: _progressAnimation,
+                  builder: (context, child) {
+                    return LinearProgressIndicator(
+                      value: _progressAnimation.value,
+                      backgroundColor: OnboardingTheme.progressBar,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        OnboardingTheme.progressBarFill,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
-    // Plan ready state (Screen 24)
+    // Plan ready state
     const double buttonHeightWithPadding = 80; // 64 + 8 + 8
 
-    return Stack(
-      children: [
-        // Scrollable content with bottom padding
-        SingleChildScrollView(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 24,
-            bottom: buttonHeightWithPadding + 16, // Extra space for visibility
-          ),
-          child: Column(
-            children: [
-              // Logo
-              SizedBox(
-                width: 123,
-                height: 156.3,
-                child: SvgPicture.asset(
-                  'assets/images/onboarding/logo.svg',
-                  fit: BoxFit.contain,
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Stack(
+        children: [
+          // Scrollable content with bottom padding
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 24,
+              bottom:
+                  buttonHeightWithPadding + 16, // Extra space for visibility
+            ),
+            child: Column(
+              children: [
+                // Logo
+                SizedBox(
+                  width: 123,
+                  height: 156.3,
+                  child: SvgPicture.asset(
+                    'assets/images/onboarding/logo.svg',
+                    fit: BoxFit.contain,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              // Header text
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    Text(
-                      'Your custom plan is ready',
-                      style: OnboardingTheme.displayXL.copyWith(fontSize: 28),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'A sacred rhythm designed to bring peace to your mind and stillness to your heart.',
-                      style: OnboardingTheme.bodyMedium.copyWith(
-                        fontSize: 13,
-                        color: OnboardingTheme.textPrimary.withOpacity(0.75),
-                        height: 1.4,
+                const SizedBox(height: 24),
+                // Header text
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Your custom plan is ready',
+                        style: OnboardingTheme.headingMedium,
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'A sacred rhythm designed to bring peace to your mind and stillness to your heart.',
+                        style: OnboardingTheme.bodyMedium.copyWith(
+                          color: OnboardingTheme.textPrimary.withOpacity(0.75),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Plan cards from API or default
+                ..._buildPlanCards(),
+              ],
+            ),
+          ),
+
+          // Fixed button at bottom
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: OnboardingButton(
+              text: 'Talk to Krishna',
+              onPressed: _handleComplete,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build plan cards from API data
+  List<Widget> _buildPlanCards() {
+    if (_planData == null || _planData!.isEmpty) {
+      return [];
+    }
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < _planData!.length; i++) {
+      final card = _planData![i] as Map<String, dynamic>;
+      widgets.add(_buildPlanCard(card));
+      if (i < _planData!.length - 1) {
+        widgets.add(const SizedBox(height: 16));
+      }
+    }
+    return widgets;
+  }
+
+  /// Build a single plan card
+  Widget _buildPlanCard(Map<String, dynamic> card) {
+    final items = card['items'] as List<dynamic>? ?? [];
+
+    return Container(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 24, bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0x40000000), // 25% black to match Figma
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x14111111), // rgba(17,17,17,0.08)
+            offset: const Offset(0, 4),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              SvgPicture.asset(
+                'assets/icons/sun.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  OnboardingTheme.textPrimary,
+                  BlendMode.srcIn,
                 ),
               ),
-              const SizedBox(height: 32),
-              // Daily ritual section
-              Container(
-                padding: const EdgeInsets.only(
-                    left: 16, right: 16, top: 24, bottom: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0x40000000), // 25% black to match Figma
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0x14111111), // rgba(17,17,17,0.08)
-                      offset: const Offset(0, 4),
-                      blurRadius: 16,
-                      spreadRadius: 0,
-                    ),
-                  ],
+              const SizedBox(width: 12),
+              Text(
+                card['title'] as String? ?? 'Daily ritual',
+                style: OnboardingTheme.bodyLarge.copyWith(
+                  fontWeight: FontWeight.w500,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.wb_sunny_outlined,
-                          color: OnboardingTheme.textPrimary,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Daily ritual',
-                          style: OnboardingTheme.headingMedium
-                              .copyWith(fontSize: 20),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '1/3',
-                          style: OnboardingTheme.bodyMedium.copyWith(
-                            fontSize: 14,
-                            color: OnboardingTheme.textPrimary.withOpacity(0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // Practice items
-                    _buildPracticeItem(
-                      icon: Icons.chat_bubble_outline,
-                      title: 'Reflect with Krishna',
-                      duration: '20 mins',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPracticeItem(
-                      icon: Icons.self_improvement,
-                      title: 'Sādhanā',
-                      duration: '20 mins',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPracticeItem(
-                      icon: Icons.air,
-                      title: 'Breathwork',
-                      duration: 'Box breathing, 5 minutes',
-                      showCheckbox: false,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPracticeItem(
-                      icon: Icons.directions_walk,
-                      title: 'Outside Walk',
-                      duration: '25 minutes',
-                      showCheckbox: false,
-                    ),
-                  ],
+              ),
+              const Spacer(),
+              Text(
+                card['subtitle'] as String? ?? '',
+                style: OnboardingTheme.bodyMedium.copyWith(
+                  color: OnboardingTheme.textPrimary.withOpacity(0.6),
                 ),
               ),
             ],
           ),
-        ),
-
-        // Fixed button at bottom
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: OnboardingButton(
-            text: 'Talk to Krishna',
-            onPressed: widget.onComplete,
-          ),
-        ),
-      ],
+          const SizedBox(height: 24),
+          // Practice items
+          ..._buildPracticeItems(items),
+        ],
+      ),
     );
   }
 
+  /// Build practice items for a card
+  List<Widget> _buildPracticeItems(List<dynamic> items) {
+    final widgets = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i] as Map<String, dynamic>;
+      widgets.add(_buildPracticeItem(
+        iconName: item['icon'] as String? ?? 'convo',
+        title: item['title'] as String? ?? '',
+        duration: item['duration'] as String? ?? '',
+      ));
+      if (i < items.length - 1) {
+        widgets.add(const SizedBox(height: 16));
+      }
+    }
+    return widgets;
+  }
+
   Widget _buildPracticeItem({
-    required IconData icon,
+    required String iconName,
     required String title,
     required String duration,
-    bool showCheckbox = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.transparent, // Transparent to match Figma
+        color: const Color(0x40000000), // 25% Black (rgba(0,0,0,0.25))
+        border: Border.all(
+          color: OnboardingTheme.textPrimary.withOpacity(0.15),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -317,12 +397,17 @@ class _CompletionScreenState extends State<CompletionScreen>
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Icon
-          Icon(
-            icon,
-            color: OnboardingTheme.textPrimary,
-            size: 24,
+          // SVG Icon
+          SvgPicture.asset(
+            'assets/icons/$iconName.svg',
+            width: 28,
+            height: 28,
+            colorFilter: const ColorFilter.mode(
+              OnboardingTheme.textPrimary,
+              BlendMode.srcIn,
+            ),
           ),
           const SizedBox(width: 16),
           // Text
@@ -333,35 +418,19 @@ class _CompletionScreenState extends State<CompletionScreen>
                 Text(
                   title,
                   style: OnboardingTheme.bodyMedium.copyWith(
-                    fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 8), // 8px gap to match Figma
+                const SizedBox(height: 4),
                 Text(
                   duration,
                   style: OnboardingTheme.bodyMedium.copyWith(
-                    fontSize: 12,
-                    color: OnboardingTheme.textPrimary
-                        .withOpacity(0.48), // 48% opacity to match Figma
+                    color: OnboardingTheme.textPrimary.withOpacity(0.65),
                   ),
                 ),
               ],
             ),
           ),
-          // Optional checkbox placeholder
-          if (showCheckbox)
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: OnboardingTheme.textPrimary.withOpacity(0.3),
-                  width: 1.5,
-                ),
-              ),
-            ),
         ],
       ),
     );
