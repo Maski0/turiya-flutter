@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'icons/mic_icon.dart';
 import 'icons/send_icon.dart';
 import 'icons/check_icon.dart';
+import 'icons/voice_mode_icon.dart';
 import 'icons/textchat_icon.dart';
 import 'star_border.dart';
 
@@ -16,12 +17,18 @@ class BottomInputBar extends StatefulWidget {
   final VoidCallback onMicTap;
   final VoidCallback? onMicLongPress;
   final VoidCallback? onStopAudio;
-  final bool showChatButton;
-  final VoidCallback? onChatButtonTap;
   final bool enabled;
+  // LiveKit voice mode
   final bool isLiveKitConnected;
   final bool isLiveKitConnecting;
+  final VoidCallback? onVoiceCallTap;
   final VoidCallback? onDisconnectLiveKit;
+  final VoidCallback? onSettingsTap;
+  final bool isMicMuted;
+  final VoidCallback? onMicToggle;
+  // Chat button
+  final bool showChatButton;
+  final VoidCallback? onChatButtonTap;
 
   const BottomInputBar({
     super.key,
@@ -34,12 +41,16 @@ class BottomInputBar extends StatefulWidget {
     required this.onMicTap,
     this.onMicLongPress,
     this.onStopAudio,
-    this.showChatButton = false,
-    this.onChatButtonTap,
     this.enabled = true,
     this.isLiveKitConnected = false,
     this.isLiveKitConnecting = false,
+    this.onVoiceCallTap,
     this.onDisconnectLiveKit,
+    this.onSettingsTap,
+    this.isMicMuted = false,
+    this.onMicToggle,
+    this.showChatButton = false,
+    this.onChatButtonTap,
   });
 
   @override
@@ -73,7 +84,9 @@ class _BottomInputBarState extends State<BottomInputBar> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Pondering chip - shown above input when generating (not playing)
-          if (widget.isGenerating && !widget.isAudioPlaying)
+          if (widget.isGenerating &&
+              !widget.isAudioPlaying &&
+              !widget.isLiveKitConnected)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: ClipRRect(
@@ -123,263 +136,388 @@ class _BottomInputBarState extends State<BottomInputBar> {
                 ),
               ),
             ),
-          // Row containing input bar and optional chat button
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Input container - Web: containerBase = 56px
-              Expanded(
-                child: Padding(
-                  // Symmetric margin when chat button hidden, left only when shown
-                  padding: EdgeInsets.only(
-                    left: 8,
-                    right: widget.showChatButton ? 0 : 8,
-                  ),
-                  // Animated star border with frosted glass effect
-                  child: AnimatedStarBorder(
-                    color: const Color(0x99FFFFFF),
-                    speed: const Duration(seconds: 8),
-                    child: ClipRRect(
+
+          // Voice Mode UI - 3 buttons when LiveKit connected
+          if (widget.isLiveKitConnected || widget.isLiveKitConnecting)
+            _buildVoiceModeUI()
+          else
+            _buildChatInputUI(),
+        ],
+      ),
+    );
+  }
+
+  /// Voice Mode UI - 3 centered buttons (Mic Toggle, Cancel, Settings)
+  Widget _buildVoiceModeUI() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Mic Toggle button
+          Tooltip(
+            message: widget.isMicMuted ? 'Unmute' : 'Mute',
+            child: GestureDetector(
+              onTap: widget.onMicToggle,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: widget.isMicMuted
+                          ? const Color(0x40FFFFFF)
+                          : const Color(0x28FFFFFF),
                       borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                        child: Container(
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0x28FFFFFF), // ~16% opacity white
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0x40FFFFFF),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Padding(
-                            // Web: p-4 but we need less vertical to fit in 56px
-                            padding: const EdgeInsets.only(
-                              left: 18,
-                              top: 6,
-                              right: 8,
-                              bottom: 6,
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Textarea/Input field
-                                Expanded(
-                                  child: TextField(
-                                    controller: widget.textController,
-                                    focusNode: widget.focusNode,
-                                    enabled: widget.enabled,
-                                    readOnly: widget.isGenerating ||
-                                        widget.isAudioPlaying,
-                                    maxLines: null,
-                                    // Use theme: titleLarge (18px)
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge!
-                                        .copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                          height: 1.25,
-                                        ),
-                                    decoration: InputDecoration(
-                                      hintText: widget.isLiveKitConnecting &&
-                                              widget.isLiveKitConnected
-                                          ? 'Disconnecting...'
-                                          : widget.isLiveKitConnecting
-                                              ? 'Connecting...'
-                                              : widget.isGenerating
-                                                  ? 'Pondering...'
-                                                  : widget.isLiveKitConnected
-                                                      ? 'Speak what your heart seeks'
-                                                      : 'Ask what your heart seeks',
-                                      // Use theme: titleLarge (18px)
-                                      hintStyle: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge!
-                                          .copyWith(
-                                            color:
-                                                Colors.white.withOpacity(0.5),
-                                            fontWeight: FontWeight.w500,
-                                            height: 1.25,
-                                          ),
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.zero,
-                                      isDense: true,
-                                    ),
-                                    onSubmitted: widget.onSubmit,
-                                  ),
-                                ),
-
-                                // Mic button - hidden when LiveKit is connected or connecting
-                                if (!widget.isLiveKitConnected &&
-                                    !widget.isLiveKitConnecting)
-                                  GestureDetector(
-                                    onTap: (widget.isGenerating ||
-                                            widget.isAudioPlaying)
-                                        ? null
-                                        : widget.onMicTap,
-                                    onLongPress: (widget.isGenerating ||
-                                            widget.isAudioPlaying)
-                                        ? null
-                                        : widget.onMicLongPress,
-                                    child: Opacity(
-                                      opacity: (widget.isGenerating ||
-                                              widget.isAudioPlaying)
-                                          ? 0.3
-                                          : 1.0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.transparent,
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: const MicIcon(size: 28),
-                                      ),
-                                    ),
-                                  ),
-
-                                // Right button - dynamic based on state
-                                if (widget.isLiveKitConnected ||
-                                    widget.isLiveKitConnecting)
-                                  // LiveKit connected or connecting: show close button to disconnect/cancel
-                                  GestureDetector(
-                                    onTap: widget.onDisconnectLiveKit,
-                                    child: Container(
-                                      margin: const EdgeInsets.only(left: 12),
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.transparent,
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                    ),
-                                  )
-                                else if (widget.isRecording)
-                                  // Recording: show check to submit
-                                  GestureDetector(
-                                    onTap: () => widget
-                                        .onSubmit(widget.textController.text),
-                                    child: Container(
-                                      margin: const EdgeInsets.only(left: 12),
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.transparent,
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: const CheckIcon(size: 24),
-                                    ),
-                                  )
-                                else if (widget.isAudioPlaying &&
-                                    widget.onStopAudio != null)
-                                  // Streaming: show stop button in circle
-                                  GestureDetector(
-                                    onTap: widget.onStopAudio,
-                                    child: Container(
-                                      width: 38,
-                                      height: 38,
-                                      margin: const EdgeInsets.only(left: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white.withOpacity(0.2),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(
-                                          Icons.stop_rounded,
-                                          color: Colors.white,
-                                          size: 32,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  // Normal/Pondering: show send button (disabled when pondering)
-                                  Opacity(
-                                    opacity: widget.isGenerating ? 0.3 : 1.0,
-                                    child: GestureDetector(
-                                      onTap: (widget.isGenerating ||
-                                              widget.textController.text
-                                                  .trim()
-                                                  .isEmpty)
-                                          ? null
-                                          : () => widget.onSubmit(
-                                              widget.textController.text),
-                                      child: Container(
-                                        margin: const EdgeInsets.only(left: 4),
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.transparent,
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: SendIcon(
-                                          isActive: widget.textController.text
-                                                  .trim()
-                                                  .isNotEmpty &&
-                                              !widget.isGenerating,
-                                          size: 28,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      border: Border.all(
+                        color: const Color(0x40FFFFFF),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        widget.isMicMuted ? Icons.mic_off : Icons.mic,
+                        color: Colors.white,
+                        size: 20,
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(width: 16),
 
-              // Chat button - show when: text empty OR pondering OR streaming
-              if (widget.showChatButton &&
-                  (widget.textController.text.trim().isEmpty ||
-                      widget.isGenerating ||
-                      widget.isAudioPlaying))
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8),
-                  // Frosted glass effect with BackdropFilter
-                  child: GestureDetector(
-                    onTap: widget.onChatButtonTap,
-                    child: ClipRRect(
+          // Cancel/Disconnect button
+          Tooltip(
+            message:
+                widget.isLiveKitConnecting ? 'Connecting...' : 'Disconnect',
+            child: GestureDetector(
+              onTap: widget.onDisconnectLiveKit,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0x28FFFFFF),
                       borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                        child: Container(
-                          height: 56,
-                          width: 56,
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0x28FFFFFF), // ~16% opacity white
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0x40FFFFFF),
-                              width: 0.5,
+                      border: Border.all(
+                        color: const Color(0x40FFFFFF),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: widget.isLiveKitConnecting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 20,
                             ),
-                          ),
-                          child: const Center(
-                            child: TextChatIcon(size: 20),
-                          ),
-                        ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // Settings button
+          Tooltip(
+            message: 'Settings',
+            child: GestureDetector(
+              onTap: widget.onSettingsTap,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0x28FFFFFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0x40FFFFFF),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.settings_outlined,
+                        color: Colors.white,
+                        size: 20,
                       ),
                     ),
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Chat Input UI - text input with mic + send, and Voice Call button
+  Widget _buildChatInputUI() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Input container - takes ~70% width
+        Expanded(
+          flex: 7,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0x28FFFFFF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0x40FFFFFF),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 14,
+                      top: 4,
+                      right: 6,
+                      bottom: 4,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Text input field
+                        Expanded(
+                          child: TextField(
+                            controller: widget.textController,
+                            focusNode: widget.focusNode,
+                            enabled: widget.enabled,
+                            readOnly:
+                                widget.isGenerating || widget.isAudioPlaying,
+                            maxLines: null,
+                            style: const TextStyle(
+                              fontFamily: 'Alegreya',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                              height: 1.25,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: widget.isGenerating
+                                  ? 'Pondering...'
+                                  : 'Ask what your heart seeks',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Alegreya',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withOpacity(0.5),
+                                height: 1.25,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                            ),
+                            onSubmitted: widget.onSubmit,
+                          ),
+                        ),
+
+                        // Mic button - for STT (speech to text)
+                        GestureDetector(
+                          onTap: (widget.isGenerating || widget.isAudioPlaying)
+                              ? null
+                              : widget.onMicTap,
+                          onLongPress:
+                              (widget.isGenerating || widget.isAudioPlaying)
+                                  ? null
+                                  : widget.onMicLongPress,
+                          child: Opacity(
+                            opacity:
+                                (widget.isGenerating || widget.isAudioPlaying)
+                                    ? 0.3
+                                    : 1.0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: widget.isRecording
+                                    ? Colors.white.withOpacity(0.1)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: widget.isRecording
+                                  ? const Icon(Icons.close,
+                                      color: Colors.white, size: 20)
+                                  : const MicIcon(size: 22),
+                            ),
+                          ),
+                        ),
+
+                        // Right button - dynamic based on state
+                        if (widget.isRecording)
+                          // Recording: show check to submit
+                          GestureDetector(
+                            onTap: () =>
+                                widget.onSubmit(widget.textController.text),
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 4),
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const CheckIcon(size: 20),
+                            ),
+                          )
+                        else if (widget.isAudioPlaying &&
+                            widget.onStopAudio != null)
+                          // Playing audio: show stop button
+                          GestureDetector(
+                            onTap: widget.onStopAudio,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              margin: const EdgeInsets.only(left: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.stop_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          // Normal: show send button
+                          Opacity(
+                            opacity: widget.isGenerating ? 0.3 : 1.0,
+                            child: GestureDetector(
+                              onTap: (widget.isGenerating ||
+                                      widget.textController.text.trim().isEmpty)
+                                  ? null
+                                  : () => widget
+                                      .onSubmit(widget.textController.text),
+                              child: Container(
+                                margin: const EdgeInsets.only(left: 4),
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: SendIcon(
+                                  isActive: widget.textController.text
+                                          .trim()
+                                          .isNotEmpty &&
+                                      !widget.isGenerating,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Voice Call button (LiveKit) - with star border
+        Padding(
+          padding: const EdgeInsets.only(left: 10),
+          child: AnimatedStarBorder(
+            color: const Color(0x99FFFFFF),
+            speed: const Duration(seconds: 8),
+            child: Tooltip(
+              message: 'Voice Call',
+              child: GestureDetector(
+                onTap: widget.onVoiceCallTap,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0x28FFFFFF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x40FFFFFF),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: const Center(
+                        child: VoiceModeIcon(size: 20),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Chat button - show when: text empty OR pondering OR streaming
+        if (widget.showChatButton &&
+            (widget.textController.text.trim().isEmpty ||
+                widget.isGenerating ||
+                widget.isAudioPlaying))
+          Padding(
+            padding: const EdgeInsets.only(left: 10, right: 4),
+            child: GestureDetector(
+              onTap: widget.onChatButtonTap,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0x28FFFFFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0x40FFFFFF),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: const Center(
+                      child: TextChatIcon(size: 18),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

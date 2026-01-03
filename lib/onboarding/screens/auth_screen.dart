@@ -6,6 +6,7 @@ import '../models/onboarding_data.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
 import '../../blocs/auth/auth_state.dart';
+import '../../utils/toast_utils.dart';
 
 /// Screen 21: "Save your progress, make Krishna remember you"
 class AuthScreen extends StatefulWidget {
@@ -27,6 +28,29 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   bool _isSigningIn = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Check if already authenticated (e.g., returning from OAuth deeplink)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkIfAlreadyAuthenticated();
+    });
+  }
+
+  void _checkIfAlreadyAuthenticated() {
+    final state = context.read<AuthBloc>().state;
+    if (state is AuthAuthenticated) {
+      print('✅ Already authenticated, proceeding to next screen');
+      widget.data.hasCompletedAuth = true;
+      widget.onNext();
+    } else if (state is AuthLoading) {
+      // OAuth in progress, show loading state
+      setState(() {
+        _isSigningIn = true;
+      });
+    }
+  }
+
   void _handleGoogleSignIn() {
     if (_isSigningIn) return;
 
@@ -43,7 +67,12 @@ class _AuthScreenState extends State<AuthScreen> {
     // Return content only - wrapper handles scaffold
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        if (state is AuthAuthenticated) {
+        if (state is AuthLoading) {
+          // Show loading state
+          setState(() {
+            _isSigningIn = true;
+          });
+        } else if (state is AuthAuthenticated) {
           // Sign-in successful
           setState(() {
             _isSigningIn = false;
@@ -56,18 +85,13 @@ class _AuthScreenState extends State<AuthScreen> {
             _isSigningIn = false;
           });
 
-          // Show error message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
+          // Show error message using app's toast utility
+          ToastUtils.showError(context, state.message);
+        } else if (state is AuthUnauthenticated) {
+          // Reset loading state
+          setState(() {
+            _isSigningIn = false;
+          });
         }
       },
       child: Column(

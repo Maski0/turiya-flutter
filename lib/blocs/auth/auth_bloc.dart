@@ -117,7 +117,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (event.isAuthenticated && event.userData != null) {
       final user = event.userData!['user'] as supabase.User;
       final session = event.userData!['session'] as supabase.Session;
-      
+
       emit(AuthAuthenticated(
         user: user,
         session: session,
@@ -133,4 +133,3 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     return super.close();
   }
 }
-

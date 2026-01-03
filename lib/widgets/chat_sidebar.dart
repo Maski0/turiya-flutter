@@ -201,7 +201,7 @@ class _MessageItem extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 16, bottom: 4),
           child: Text(
-            'Sathya Sai Baba',
+            'Kṛṣṇa',
             style: TextStyle(
               fontFamily: 'Alegreya',
               fontSize: 14,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 import 'onboarding/onboarding_gate.dart';
@@ -42,11 +43,23 @@ import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
 import 'theme/app_theme.dart';
 
+// TODO: REMOVE FOR PRODUCTION - Fix server SSL certificate chain instead
+class _DevHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (cert, host, port) => true;
+  }
+}
+
 // Global cache service
 late final CacheService cacheService;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // TODO: REMOVE FOR PRODUCTION - Fix server SSL cert chain instead
+  HttpOverrides.global = _DevHttpOverrides();
 
   // Set fullscreen mode - hide status bar and navigation bar
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -239,7 +252,20 @@ class _MainScreenState extends State<_MainScreen>
       _setupLiveKitCallbacks();
       // Sync onboarding data to backend if user is authenticated
       _syncOnboardingDataIfNeeded();
+      // Load credits if already authenticated (e.g., coming from onboarding)
+      _loadCreditsIfAuthenticated();
     });
+  }
+
+  /// Load credits if user is already authenticated (handles post-onboarding case)
+  void _loadCreditsIfAuthenticated() {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      // User is already authenticated, load credits
+      context.read<CreditsBloc>().add(const CreditsRequested());
+      // Also load last conversation
+      _loadLastThread();
+    }
   }
 
   /// Check local storage for onboarding data and sync to backend if authenticated
@@ -1474,8 +1500,8 @@ class _MainScreenState extends State<_MainScreen>
 
                       // Bottom Input Bar with Liquid Glass
                       Positioned(
-                        left: 10,
-                        right: 10,
+                        left: 4,
+                        right: 4,
                         bottom: keyboardHeight,
                         child: SafeArea(
                           bottom: true,
@@ -1490,12 +1516,26 @@ class _MainScreenState extends State<_MainScreen>
                               onSubmit: (text) => _sendMessage(text, context),
                               onMicTap: _toggleListening,
                               onStopAudio: _stopAudio,
-                              showChatButton: !_showChatSidebar,
                               enabled: !_showLoginModal,
+                              // LiveKit voice mode
                               isLiveKitConnected: _isLiveKitConnected,
                               isLiveKitConnecting: _isLiveKitConnecting ||
                                   _isLiveKitDisconnecting,
+                              onVoiceCallTap: _connectToLiveKit,
                               onDisconnectLiveKit: _disconnectFromLiveKit,
+                              onSettingsTap: () {
+                                setState(() {
+                                  _showMenuDrawer = true;
+                                });
+                                _animationController.forward();
+                              },
+                              isMicMuted: !_liveKitService.isMicrophoneEnabled,
+                              onMicToggle: () async {
+                                await _liveKitService.toggleMicrophone();
+                                setState(() {});
+                              },
+                              // Chat button
+                              showChatButton: !_showChatSidebar,
                               onChatButtonTap: () {
                                 setState(() {
                                   _showChatSidebar = true;
@@ -1626,8 +1666,12 @@ class _MainScreenState extends State<_MainScreen>
       return;
     }
 
-    // Always use LiveKit for voice mode
-    await _toggleLiveKitVoice();
+    // Toggle STT (speech-to-text) - converts voice to text input
+    if (_isRecording) {
+      await _stopListening();
+    } else {
+      await _startListening();
+    }
   }
 
   /// Toggle LiveKit voice mode (connect/disconnect and mic)
