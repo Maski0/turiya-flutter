@@ -6,10 +6,7 @@ import 'onboarding_flow.dart';
 class OnboardingGate extends StatefulWidget {
   final Widget child;
 
-  const OnboardingGate({
-    super.key,
-    required this.child,
-  });
+  const OnboardingGate({super.key, required this.child});
 
   @override
   State<OnboardingGate> createState() => _OnboardingGateState();
@@ -51,17 +48,11 @@ class _OnboardingGateState extends State<OnboardingGate> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_hasCompletedOnboarding) {
-      return OnboardingFlow(
-        onComplete: _completeOnboarding,
-      );
+      return OnboardingFlow(onComplete: _completeOnboarding);
     }
 
     return widget.child;

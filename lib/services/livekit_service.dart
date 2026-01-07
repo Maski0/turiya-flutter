@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -72,6 +73,20 @@ class LiveKitService {
   bool get isAgentReady => isAgentAvailable(_currentState);
   Room? get room => _room;
 
+  /// Force audio output to speaker (not earpiece)
+  /// This must be called AFTER LiveKit connects since LiveKit changes audio session
+  Future<void> _forceSpeakerOutput() async {
+    try {
+      if (Platform.isIOS || Platform.isAndroid) {
+        // Use LiveKit's Hardware class to set speaker output
+        await Hardware.instance.setSpeakerphoneOn(true);
+        debugPrint('🔊 Forced audio output to speaker');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error forcing speaker output: $e');
+    }
+  }
+
   /// Connect to LiveKit room with the provided connection details
   Future<bool> connect({
     required String serverUrl,
@@ -133,6 +148,9 @@ class LiveKitService {
       debugPrint('✅ LiveKit: Connected to room $roomName');
       debugPrint('⏳ Waiting for agent to join the room...');
 
+      // Force speaker output after connection (LiveKit defaults to earpiece)
+      await _forceSpeakerOutput();
+
       // Check if agent is already in room
       for (final participant in _room!.remoteParticipants.values) {
         if (_isAgent(participant)) {
@@ -185,11 +203,13 @@ class LiveKitService {
         debugPrint('🔄 LiveKit: Reconnecting...');
         onConnectionStateChanged?.call('reconnecting');
       })
-      ..on<RoomReconnectedEvent>((event) {
+      ..on<RoomReconnectedEvent>((event) async {
         debugPrint('✅ LiveKit: Reconnected');
         onConnectionStateChanged?.call('connected');
+        // Re-force speaker after reconnection
+        await _forceSpeakerOutput();
       })
-      ..on<ParticipantConnectedEvent>((event) {
+      ..on<ParticipantConnectedEvent>((event) async {
         debugPrint(
             '👤 LiveKit: Participant connected: ${event.participant.identity}');
         if (_isAgent(event.participant)) {
@@ -200,6 +220,8 @@ class LiveKitService {
           _updateState(AgentState.listening);
           onConnectionStateChanged?.call('connected');
           onAgentConnected?.call();
+          // Re-force speaker when agent connects
+          await _forceSpeakerOutput();
         }
       })
       ..on<ParticipantDisconnectedEvent>((event) {
@@ -282,11 +304,8 @@ class LiveKitService {
           debugPrint('🛑 User interruption detected');
           _handleInterruption();
         } else if (!isAgentSpeaking && !isUserSpeaking) {
-          final micEnabled = _isMicrophoneEnabled;
-          if (micEnabled && _currentState == AgentState.listening) {
-            debugPrint('🤔 User stopped speaking - agent is thinking...');
-            _updateState(AgentState.thinking);
-          }
+          // Don't auto-transition to thinking here - rely on transcription events
+          // This prevents false pondering after agent finishes speaking
           onAgentSpeakingChanged?.call(false);
         }
       })
@@ -297,8 +316,16 @@ class LiveKitService {
           for (final segment in event.segments) {
             final text = segment.text.trim();
             if (text.isNotEmpty) {
-              debugPrint('🎤 User transcription: "$text"');
+              debugPrint(
+                  '🎤 User transcription: "$text" (final: ${segment.isFinal})');
               onUserTranscription?.call(text);
+
+              // When user's final transcription is received, transition to thinking/pondering
+              if (segment.isFinal && _currentState != AgentState.speaking) {
+                debugPrint(
+                    '🤔 User finished speaking - showing pondering state');
+                _updateState(AgentState.thinking);
+              }
             }
           }
         } else if (event.participant is RemoteParticipant &&
@@ -452,6 +479,9 @@ class LiveKitService {
         debugPrint(
             '   Track: ${pub.kind} - ${pub.source} - subscribed: ${pub.subscribed}');
       }
+
+      // Re-force speaker output after mic change (mic can affect audio routing on iOS)
+      await _forceSpeakerOutput();
     } catch (e) {
       debugPrint('❌ LiveKit: Microphone error: $e');
       onError?.call('Microphone error: $e');
@@ -560,8 +590,8 @@ class LiveKitService {
       _thinkingTimeout = Timer(_thinkingTimeoutDuration, () {
         if (_currentState == AgentState.thinking) {
           debugPrint('⏰ Thinking timeout!');
+          // Don't update state here - the error handler will disconnect
           onError?.call('Response timeout - please try again');
-          _updateState(AgentState.listening);
         }
       });
     }

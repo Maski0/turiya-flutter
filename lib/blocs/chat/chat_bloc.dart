@@ -48,22 +48,21 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     );
     currentMessages.add(userMessage);
 
-    // Save user message to cache immediately (triggers stream)
-    // Also clear old follow-ups from cache
+    // Emit immediately with the new user message so it shows instantly
+    emit(ChatLoaded(
+      messages: currentMessages,
+      threadId: currentThreadId,
+      isGenerating: true,
+      followUpQuestions: [], // Clear old follow-ups when starting new message
+    ));
+
+    // Save user message to cache (for persistence and stream sync)
     if (currentThreadId != null) {
       await _cacheService.cacheMessages(
         currentMessages,
         currentThreadId,
         followUpQuestions: [], // Clear old follow-ups when sending new message
       );
-    }
-
-    // Show loading state and clear old follow-ups
-    if (state is ChatLoaded) {
-      emit((state as ChatLoaded).copyWith(
-        isGenerating: true,
-        followUpQuestions: [], // Clear old follow-ups when starting new message
-      ));
     }
 
     try {

@@ -1,11 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import '../blocs/auth/auth_bloc_export.dart';
 import '../blocs/credits/credits_bloc.dart';
 import '../blocs/memory/memory_bloc.dart';
 import '../blocs/chat/chat_bloc_export.dart';
+import '../services/background_audio_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/toast_utils.dart';
 
@@ -27,33 +27,26 @@ class _ProfileMenuState extends State<ProfileMenu> {
   // Navigation state
   String? _selectedTab; // null = tab selection, else = content view
 
-  // Settings state
-  String _selectedLanguage = 'auto';
-  bool _isLanguageDropdownOpen = false;
-  String _selectedTimeOfDay = 'auto'; // auto, morning, evening, night
-  bool _isTimeOfDayDropdownOpen = false;
-
   // Billing state
   bool _isManageDropdownOpen = false;
 
-  final List<Map<String, String>> _languages = [
-    {'name': 'Auto', 'iso': 'auto'},
-    {'name': 'English', 'iso': 'en'},
-    {'name': 'हिन्दी', 'iso': 'hi'},
-  ];
+  // Volume slider state
+  double _musicVolume = 0.15;
+
+  @override
+  void initState() {
+    super.initState();
+    _musicVolume = BackgroundAudioService().volume;
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
         // Close dropdowns when tapping outside
-        if (_isLanguageDropdownOpen ||
-            _isManageDropdownOpen ||
-            _isTimeOfDayDropdownOpen) {
+        if (_isManageDropdownOpen) {
           setState(() {
-            _isLanguageDropdownOpen = false;
             _isManageDropdownOpen = false;
-            _isTimeOfDayDropdownOpen = false;
           });
         }
       },
@@ -150,7 +143,6 @@ class _ProfileMenuState extends State<ProfileMenu> {
               _buildBackButton(
                 onTap: () => setState(() {
                   _selectedTab = null;
-                  _isLanguageDropdownOpen = false;
                   _isManageDropdownOpen = false;
                 }),
               ),
@@ -384,37 +376,20 @@ class _ProfileMenuState extends State<ProfileMenu> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Language setting
+        // Background Music Volume setting
         Text(
-          'Conversation Language',
+          'Background Music',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 6),
         Text(
-          'The language used by AI companion in your chat.',
+          'Adjust the background music volume.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.tertiaryWhite,
               ),
         ),
         const SizedBox(height: 16),
-        _buildLanguageDropdown(),
-
-        const SizedBox(height: 32),
-
-        // Time of Day setting
-        Text(
-          'Scene Ambience',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Auto-adjusts to your local time. Override here.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.tertiaryWhite,
-              ),
-        ),
-        const SizedBox(height: 16),
-        _buildTimeOfDayDropdown(),
+        _buildVolumeSlider(),
 
         const SizedBox(height: 32),
 
@@ -436,243 +411,62 @@ class _ProfileMenuState extends State<ProfileMenu> {
     );
   }
 
-  Widget _buildLanguageDropdown() {
-    final selectedLang = _languages.firstWhere(
-      (l) => l['iso'] == _selectedLanguage,
-      orElse: () => _languages.first,
-    );
-
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isLanguageDropdownOpen = !_isLanguageDropdownOpen;
-              _isManageDropdownOpen = false;
-            });
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0x14FFFFFF),
-                width: 1,
+  Widget _buildVolumeSlider() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0x14FFFFFF),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _musicVolume == 0 ? Icons.volume_off : Icons.volume_up,
+            color: AppTheme.secondaryWhite,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withOpacity(0.2),
+                thumbColor: Colors.white,
+                overlayColor: Colors.white.withOpacity(0.1),
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              ),
+              child: Slider(
+                value: _musicVolume,
+                min: 0,
+                max: 1,
+                onChanged: (value) {
+                  setState(() {
+                    _musicVolume = value;
+                  });
+                  BackgroundAudioService().setVolume(value);
+                },
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  selectedLang['name']!,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.secondaryWhite,
-                      ),
-                ),
-                AnimatedRotation(
-                  turns: _isLanguageDropdownOpen ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: AppTheme.secondaryWhite,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 36,
+            child: Text(
+              '${(_musicVolume * 100).round()}%',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.tertiaryWhite,
                   ),
-                ),
-              ],
             ),
           ),
-        ),
-        if (_isLanguageDropdownOpen)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(top: 8),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: _languages.map((lang) {
-                final isSelected = lang['iso'] == _selectedLanguage;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedLanguage = lang['iso']!;
-                      _isLanguageDropdownOpen = false;
-                    });
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.black : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      lang['name']!,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: isSelected ? Colors.white : Colors.black,
-                          ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
-  }
-
-  final List<Map<String, String>> _timeOfDayOptions = [
-    {'name': 'Auto (Device Time)', 'value': 'auto', 'icon': '🕐'},
-    {'name': 'Morning', 'value': 'morning', 'icon': '🌅'},
-    {'name': 'Evening', 'value': 'evening', 'icon': '🌆'},
-    {'name': 'Night', 'value': 'night', 'icon': '🌙'},
-  ];
-
-  Widget _buildTimeOfDayDropdown() {
-    final selectedTime = _timeOfDayOptions.firstWhere(
-      (t) => t['value'] == _selectedTimeOfDay,
-      orElse: () => _timeOfDayOptions.first,
-    );
-
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isTimeOfDayDropdownOpen = !_isTimeOfDayDropdownOpen;
-              _isLanguageDropdownOpen = false;
-              _isManageDropdownOpen = false;
-            });
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0x14FFFFFF),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      selectedTime['icon']!,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      selectedTime['name']!,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.secondaryWhite,
-                          ),
-                    ),
-                  ],
-                ),
-                AnimatedRotation(
-                  turns: _isTimeOfDayDropdownOpen ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: AppTheme.secondaryWhite,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_isTimeOfDayDropdownOpen)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(top: 8),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: _timeOfDayOptions.map((time) {
-                final isSelected = time['value'] == _selectedTimeOfDay;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedTimeOfDay = time['value']!;
-                      _isTimeOfDayDropdownOpen = false;
-                    });
-                    _applyTimeOfDay(time['value']!);
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.black : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          time['icon']!,
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          time['name']!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: isSelected ? Colors.white : Colors.black,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _applyTimeOfDay(String timeOfDay) {
-    try {
-      if (timeOfDay == 'auto') {
-        // Re-apply based on device clock
-        final hour = DateTime.now().hour;
-        if (hour >= 5 && hour < 17) {
-          sendToUnity("TimeOfDay", "SetMorning", "");
-        } else if (hour >= 17 && hour < 20) {
-          sendToUnity("TimeOfDay", "SetEvening", "");
-        } else {
-          sendToUnity("TimeOfDay", "SetNight", "");
-        }
-      } else {
-        switch (timeOfDay) {
-          case 'morning':
-            sendToUnity("TimeOfDay", "SetMorning", "");
-            break;
-          case 'evening':
-            sendToUnity("TimeOfDay", "SetEvening", "");
-            break;
-          case 'night':
-            sendToUnity("TimeOfDay", "SetNight", "");
-            break;
-        }
-      }
-      print('🌅 Time of day changed to: $timeOfDay');
-    } catch (e) {
-      print('Error setting time of day: $e');
-    }
   }
 
   Widget _buildClearHistoryButton() {
@@ -879,7 +673,6 @@ class _ProfileMenuState extends State<ProfileMenu> {
           onTap: () {
             setState(() {
               _isManageDropdownOpen = !_isManageDropdownOpen;
-              _isLanguageDropdownOpen = false;
             });
           },
           child: Container(

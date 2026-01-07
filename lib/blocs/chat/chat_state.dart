@@ -41,7 +41,8 @@ class ChatLoaded extends ChatState {
   });
 
   @override
-  List<Object?> get props => [messages, threadId, followUpQuestions, isGenerating, pendingMessage];
+  List<Object?> get props =>
+      [messages, threadId, followUpQuestions, isGenerating, pendingMessage];
 
   ChatLoaded copyWith({
     List<ChatMessage>? messages,
@@ -94,7 +95,7 @@ class ChatMessage {
     if (messageType == 'human') {
       messageType = 'user';
     }
-    
+
     // Parse content - if it's AI message with JSON, extract the response
     String content = json['content'] ?? '';
     if (messageType == 'ai' && content.isNotEmpty) {
@@ -108,16 +109,21 @@ class ChatMessage {
         // If not JSON or parsing fails, use content as-is
       }
     }
-    
+
+    // Parse timestamp from created_at field
+    DateTime? parsedTimestamp;
+    if (json['created_at'] != null) {
+      parsedTimestamp = DateTime.tryParse(json['created_at']);
+    }
+
     return ChatMessage(
       id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
       content: content,
       type: messageType,
-      timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp']) ?? DateTime.now()
-          : DateTime.now(),
+      timestamp: parsedTimestamp,
       speaker: json['speaker'],
-      isPlayed: json['isPlayed'] ?? true, // Default to true for backend messages
+      isPlayed:
+          json['isPlayed'] ?? true, // Default to true for backend messages
     );
   }
 
@@ -131,7 +137,7 @@ class ChatMessage {
       'isPlayed': isPlayed,
     };
   }
-  
+
   /// Create a copy of this message with updated fields
   ChatMessage copyWith({
     String? id,
@@ -151,4 +157,3 @@ class ChatMessage {
     );
   }
 }
-

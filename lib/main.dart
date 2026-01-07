@@ -298,6 +298,12 @@ class _MainScreenState extends State<_MainScreen>
 
   /// Setup LiveKit service callbacks
   void _setupLiveKitCallbacks() {
+    // IMPORTANT: Ensure LiveKit is disconnected on init (clean state after hot restart)
+    _liveKitService.disconnect();
+    _isLiveKitConnected = false;
+    _isLiveKitConnecting = false;
+    _agentConnected = false;
+
     _liveKitService.onConnectionStateChanged = (state) {
       if (mounted) {
         setState(() {
@@ -345,11 +351,14 @@ class _MainScreenState extends State<_MainScreen>
       if (mounted) {
         // Only show error if not already disconnected
         if (_isLiveKitConnected || _isLiveKitConnecting) {
+          _liveKitService.disconnect();
+
           setState(() {
             _isLiveKitConnected = false;
             _isLiveKitConnecting = false;
             _isLiveKitDisconnecting = false;
             _isGenerating = false;
+            _agentConnected = false;
           });
           ToastUtils.showError(context, 'Voice connection lost');
         }
@@ -1157,6 +1166,8 @@ class _MainScreenState extends State<_MainScreen>
                                 isAudioPlaying: _isAudioPlaying,
                                 onMicTap: _toggleListening,
                                 onStopAudio: _stopAudio,
+                                // Adjust bottom padding for keyboard
+                                bottomPadding: keyboardHeight + 90,
                               ),
                             ),
                           ),
@@ -1426,67 +1437,63 @@ class _MainScreenState extends State<_MainScreen>
 
                       // Bottom center - Disclaimer (hide when generating/playing/chat/menu open)
                       // Hide when chat sidebar or menu drawer is open
-                      if (!_showChatSidebar &&
-                          !_showMenuDrawer &&
-                          !_isGenerating &&
-                          !_isAudioPlaying)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: SafeArea(
-                            bottom: true,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Builder(
-                                builder: (context) {
-                                  // Show disclaimer when not generating/playing
-                                  final baseStyle = Theme.of(context)
-                                      .textTheme
-                                      .bodySmall!
-                                      .copyWith(
-                                        color: const Color(0x80FFFFFF),
-                                        height: 1.25,
-                                      );
-                                  return RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: baseStyle,
-                                      children: [
-                                        const TextSpan(
-                                          text: 'Turiya',
-                                          style: TextStyle(
-                                              fontStyle: FontStyle.italic),
+
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: SafeArea(
+                          bottom: true,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Builder(
+                              builder: (context) {
+                                // Show disclaimer when not generating/playing
+                                final baseStyle = Theme.of(context)
+                                    .textTheme
+                                    .bodySmall!
+                                    .copyWith(
+                                      color: const Color(0x80FFFFFF),
+                                      height: 1.25,
+                                    );
+                                return RichText(
+                                  textAlign: TextAlign.center,
+                                  text: TextSpan(
+                                    style: baseStyle,
+                                    children: [
+                                      const TextSpan(
+                                        text: 'Turiya',
+                                        style: TextStyle(
+                                            fontStyle: FontStyle.italic),
+                                      ),
+                                      const TextSpan(
+                                          text: ' can make mistakes. '),
+                                      TextSpan(
+                                        text: 'Check disclaimer.',
+                                        style: const TextStyle(
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: Color(0x80FFFFFF),
                                         ),
-                                        const TextSpan(
-                                            text: ' can make mistakes. '),
-                                        TextSpan(
-                                          text: 'Check disclaimer.',
-                                          style: const TextStyle(
-                                            decoration:
-                                                TextDecoration.underline,
-                                            decorationColor: Color(0x80FFFFFF),
-                                          ),
-                                          recognizer: TapGestureRecognizer()
-                                            ..onTap = () async {
-                                              final url = Uri.parse(
-                                                'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
-                                              );
-                                              if (await canLaunchUrl(url)) {
-                                                await launchUrl(url,
-                                                    mode: LaunchMode
-                                                        .externalApplication);
-                                              }
-                                            },
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
+                                        recognizer: TapGestureRecognizer()
+                                          ..onTap = () async {
+                                            final url = Uri.parse(
+                                              'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
+                                            );
+                                            if (await canLaunchUrl(url)) {
+                                              await launchUrl(url,
+                                                  mode: LaunchMode
+                                                      .externalApplication);
+                                            }
+                                          },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
+                      ),
 
                       // Main Menu (About, FAQs, Blog, Contact)
                       MainMenu(
@@ -1500,13 +1507,15 @@ class _MainScreenState extends State<_MainScreen>
 
                       // Bottom Input Bar with Liquid Glass
                       Positioned(
-                        left: 4,
-                        right: 4,
+                        left: 16,
+                        right: 16,
                         bottom: keyboardHeight,
                         child: SafeArea(
                           bottom: true,
                           child: Padding(
-                            padding: const EdgeInsets.only(bottom: 32),
+                            // Reduce bottom margin for voice mode buttons
+                            padding: EdgeInsets.only(
+                                bottom: _isLiveKitConnected ? 12 : 32),
                             child: BottomInputBar(
                               textController: _textController,
                               focusNode: _textFocusNode,
@@ -1534,8 +1543,9 @@ class _MainScreenState extends State<_MainScreen>
                                 await _liveKitService.toggleMicrophone();
                                 setState(() {});
                               },
-                              // Chat button
+                              // Chat button & pondering chip
                               showChatButton: !_showChatSidebar,
+                              hidePonderingChip: _showChatSidebar,
                               onChatButtonTap: () {
                                 setState(() {
                                   _showChatSidebar = true;
@@ -1793,11 +1803,13 @@ class _MainScreenState extends State<_MainScreen>
     _audioStreamer.cancel();
 
     // Stop audio playback immediately
+    // Send START first (clears buffer and stops playback) then END
     try {
-      sendToUnity("Flutter", "OnAudioChunk", "END");
+      sendToUnity("Flutter", "OnAudioChunk", "START"); // Stops current playback
+      sendToUnity("Flutter", "OnAudioChunk", "END"); // Signal stream end
       print('⏸️ User stopped audio playback');
     } catch (e) {
-      print('⚠️ Error sending END signal to Unity: $e');
+      print('⚠️ Error sending stop signal to Unity: $e');
     }
 
     // Clear currently playing message to allow re-play if needed
@@ -1871,6 +1883,8 @@ class _MainScreenState extends State<_MainScreen>
   }
 
   Widget _buildCreditsAndProfile(BuildContext context) {
+    final backgroundAudio = BackgroundAudioService();
+
     // Just use ProfileAvatarWidget which already shows credits badge
     return ProfileAvatarWidget(
       onSettingsTap: () {
@@ -1879,6 +1893,11 @@ class _MainScreenState extends State<_MainScreen>
         });
         _animationController.forward();
       },
+      onMusicToggle: () async {
+        await backgroundAudio.toggle();
+        setState(() {});
+      },
+      isMusicMuted: !backgroundAudio.isPlaying,
       onRecordTap: _toggleScreenRecording,
       onLanguageTap: _showLanguageSelectionDialog,
       currentLanguage: _selectedLanguage == 'telugu' ? 'Telugu' : 'English',

@@ -29,6 +29,8 @@ class BottomInputBar extends StatefulWidget {
   // Chat button
   final bool showChatButton;
   final VoidCallback? onChatButtonTap;
+  // Hide pondering chip (when chat sidebar is open)
+  final bool hidePonderingChip;
 
   const BottomInputBar({
     super.key,
@@ -51,6 +53,7 @@ class BottomInputBar extends StatefulWidget {
     this.onMicToggle,
     this.showChatButton = false,
     this.onChatButtonTap,
+    this.hidePonderingChip = false,
   });
 
   @override
@@ -84,9 +87,10 @@ class _BottomInputBarState extends State<BottomInputBar> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Pondering chip - shown above input when generating (not playing)
+          // Hidden when chat sidebar is open (it has its own indicator)
           if (widget.isGenerating &&
               !widget.isAudioPlaying &&
-              !widget.isLiveKitConnected)
+              !widget.hidePonderingChip)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: ClipRRect(
@@ -326,12 +330,14 @@ class _BottomInputBarState extends State<BottomInputBar> {
                               hintText: widget.isGenerating
                                   ? 'Pondering...'
                                   : 'Ask what your heart seeks',
+                              hintMaxLines: 1,
                               hintStyle: TextStyle(
                                 fontFamily: 'Alegreya',
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.white.withOpacity(0.5),
                                 height: 1.25,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
@@ -449,33 +455,35 @@ class _BottomInputBarState extends State<BottomInputBar> {
           ),
         ),
 
-        // Voice Call button (LiveKit) - with star border
-        Padding(
-          padding: const EdgeInsets.only(left: 10),
-          child: AnimatedStarBorder(
-            color: const Color(0x99FFFFFF),
-            speed: const Duration(seconds: 8),
-            child: Tooltip(
-              message: 'Voice Call',
-              child: GestureDetector(
-                onTap: widget.onVoiceCallTap,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      height: 48,
-                      width: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0x28FFFFFF),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0x40FFFFFF),
-                          width: 0.5,
+        // Voice Call button (LiveKit) - hide when chat screen is open
+        if (widget.showChatButton)
+          Padding(
+            padding: const EdgeInsets.only(left: 10),
+            child: AnimatedStarBorder(
+              color: const Color(0x99FFFFFF),
+              speed: const Duration(seconds: 8),
+              child: Tooltip(
+                message: 'Voice Call',
+                child: GestureDetector(
+                  onTap: widget.onVoiceCallTap,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Container(
+                        height: 48,
+                        width: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0x28FFFFFF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0x40FFFFFF),
+                            width: 0.5,
+                          ),
                         ),
-                      ),
-                      child: const Center(
-                        child: VoiceModeIcon(size: 20),
+                        child: const Center(
+                          child: VoiceModeIcon(size: 20),
+                        ),
                       ),
                     ),
                   ),
@@ -483,7 +491,6 @@ class _BottomInputBarState extends State<BottomInputBar> {
               ),
             ),
           ),
-        ),
 
         // Chat button - show when: text empty OR pondering OR streaming
         if (widget.showChatButton &&

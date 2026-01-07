@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/chat/chat_bloc_export.dart';
-import 'package:intl/intl.dart';
+import '../theme/app_theme.dart';
 import '../utils/toast_utils.dart';
+import 'icons/arrow_enter_left_icon.dart';
 import 'icons/copy_icon.dart';
 
 class ChatSidebar extends StatefulWidget {
@@ -18,6 +19,7 @@ class ChatSidebar extends StatefulWidget {
   final bool isAudioPlaying;
   final VoidCallback onMicTap;
   final VoidCallback? onStopAudio;
+  final double bottomPadding; // Space for input bar + keyboard
 
   const ChatSidebar({
     super.key,
@@ -31,6 +33,7 @@ class ChatSidebar extends StatefulWidget {
     required this.isAudioPlaying,
     required this.onMicTap,
     this.onStopAudio,
+    this.bottomPadding = 90, // Default space for input bar
   });
 
   @override
@@ -38,11 +41,6 @@ class ChatSidebar extends StatefulWidget {
 }
 
 class _ChatSidebarState extends State<ChatSidebar> {
-  String _getFormattedDate() {
-    final now = DateTime.now();
-    return DateFormat('MMMM d, yyyy').format(now).toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -55,32 +53,19 @@ class _ChatSidebarState extends State<ChatSidebar> {
             // Top spacing to start below the close button
             const SizedBox(height: 70),
 
-            // Date header - Web: 16px, 500 weight, white/70
+            // Top divider
             Padding(
-              padding: const EdgeInsets.only(bottom: 20, top: 8),
-              child: Center(
-                child: Text(
-                  _getFormattedDate(),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white.withOpacity(0.7),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                        letterSpacing: 0.5,
-                      ),
-                ),
+              padding: const EdgeInsets.only(top: 12),
+              child: Container(
+                height: 1,
+                color: Colors.white.withOpacity(0.1),
               ),
             ),
 
             // Messages list
             Expanded(
               child: BlocBuilder<ChatBloc, ChatState>(
-                buildWhen: (previous, current) {
-                  if (previous is ChatLoaded && current is ChatLoaded) {
-                    return previous.messages != current.messages ||
-                        previous.isGenerating != current.isGenerating;
-                  }
-                  return true;
-                },
+                // Always rebuild to ensure messages show instantly
                 builder: (context, state) {
                   if (state is ChatInitial ||
                       (state is ChatLoaded && state.messages.isEmpty)) {
@@ -89,23 +74,48 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
                   if (state is ChatLoaded) {
                     final messages = state.messages;
-                    final itemCount =
-                        messages.length + (state.isGenerating ? 1 : 0);
+                    final followUps = state.followUpQuestions;
+                    final isGenerating = state.isGenerating;
+                    final hasFollowUps = followUps.isNotEmpty && !isGenerating;
+
+                    // +1 for typing indicator when generating
+                    // +1 for follow-up section when has follow-ups
+                    final itemCount = messages.length +
+                        (isGenerating ? 1 : 0) +
+                        (hasFollowUps ? 1 : 0);
 
                     return ListView.builder(
                       controller: widget.scrollController,
                       reverse: true,
-                      padding: const EdgeInsets.fromLTRB(0, 8, 0, 80),
+                      padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
                       itemCount: itemCount,
                       itemBuilder: (context, index) {
                         // Show typing indicator as first item (bottom of reversed list)
-                        if (index == 0 && state.isGenerating) {
+                        if (index == 0 && isGenerating) {
                           return const _TypingIndicator();
                         }
 
-                        final messageIndex = messages.length -
-                            index -
-                            (state.isGenerating ? 0 : 1);
+                        // Show follow-ups as first item when not generating
+                        if (index == 0 && hasFollowUps) {
+                          return _FollowUpSection(
+                            questions: followUps,
+                            onQuestionTap: widget.onFollowUpTap,
+                          );
+                        }
+
+                        // Adjust index for messages
+                        int adjustedIndex = index;
+                        if (isGenerating) adjustedIndex -= 1;
+                        if (hasFollowUps && !isGenerating) adjustedIndex -= 1;
+
+                        final messageIndex =
+                            messages.length - adjustedIndex - 1;
+
+                        if (messageIndex < 0 ||
+                            messageIndex >= messages.length) {
+                          return const SizedBox.shrink();
+                        }
+
                         final message = messages[messageIndex];
 
                         return _MessageItem(
@@ -121,8 +131,14 @@ class _ChatSidebarState extends State<ChatSidebar> {
               ),
             ),
 
-            // Bottom padding for input bar
-            const SizedBox(height: 70),
+            // Divider above input bar - adjusts with keyboard
+            Padding(
+              padding: EdgeInsets.only(bottom: widget.bottomPadding),
+              child: Container(
+                height: 1,
+                color: Colors.white.withOpacity(0.1),
+              ),
+            ),
           ],
         ),
       ),
@@ -139,17 +155,11 @@ class _MessageItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.type == 'user';
-    final messageTime = DateTime.fromMillisecondsSinceEpoch(
-      int.parse(message.id),
-    );
-    final formattedTime = DateFormat('h:mm a').format(messageTime);
 
     // Web: gap 16px between messages
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: isUser
-          ? _buildUserMessage(context)
-          : _buildAIMessage(context, formattedTime),
+      child: isUser ? _buildUserMessage(context) : _buildAIMessage(context),
     );
   }
 
@@ -180,83 +190,203 @@ class _MessageItem extends StatelessWidget {
           ),
           child: Text(
             message.content,
-            style: const TextStyle(
-              fontFamily: 'Alegreya',
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-              height: 1.25, // line-height 125%
-            ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  height: 1.25,
+                ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildAIMessage(BuildContext context, String formattedTime) {
+  Widget _buildAIMessage(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Speaker name - Web: 14px, 500 weight, white/60, paddingLeft 16px
+        // Speaker name
         Padding(
-          padding: const EdgeInsets.only(left: 16, bottom: 4),
+          padding: const EdgeInsets.only(left: 16, bottom: 12),
           child: Text(
             'Kṛṣṇa',
-            style: TextStyle(
-              fontFamily: 'Alegreya',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withOpacity(0.6),
-              height: 1.25,
-            ),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: AppTheme.tertiaryWhite,
+                ),
           ),
         ),
 
-        // Message content - Web: padding 16px, 18px, line-height 140%
+        // Message content
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             message.content,
-            style: const TextStyle(
-              fontFamily: 'Alegreya',
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-              height: 1.4, // line-height 140%
-            ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
           ),
         ),
 
-        // Time and copy button - Web: mt-3 pt-2, 14px, white/50
+        // Copy button
         Padding(
           padding: const EdgeInsets.only(left: 16, right: 16, top: 12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                formattedTime,
-                style: TextStyle(
-                  fontFamily: 'Alegreya',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.5),
-                  height: 1.25,
-                ),
-              ),
               GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: message.content));
-                  ToastUtils.showSuccess(context, 'Copied to clipboard');
+                behavior: HitTestBehavior.opaque,
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: message.content));
+                  if (context.mounted) {
+                    ToastUtils.showSuccess(context, 'Copied to clipboard');
+                  }
                 },
-                child: CopyIcon(
-                  size: 18,
-                  color: Colors.white.withOpacity(0.5),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: CopyIcon(
+                    size: 18,
+                    color: AppTheme.subtleWhite,
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Follow-up questions section - matches web FollowUpButtons
+class _FollowUpSection extends StatelessWidget {
+  final List<String> questions;
+  final Function(String) onQuestionTap;
+
+  const _FollowUpSection({
+    required this.questions,
+    required this.onQuestionTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (questions.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header text: "Keep exploring..."
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Keep exploring...',
+              style: TextStyle(
+                fontFamily: 'Alegreya',
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: Colors.white.withOpacity(0.48),
+                height: 1.25,
+              ),
+            ),
+          ),
+
+          // Questions list
+          ...questions.asMap().entries.map((entry) {
+            final index = entry.key;
+            final question = entry.value;
+            final isFirst = index == 0;
+            final isLast = index == questions.length - 1;
+
+            return Column(
+              children: [
+                // Question button
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onQuestionTap(question),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: isFirst ? 0 : 12,
+                      bottom: isLast ? 0 : 12,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Arrow icon
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: ArrowEnterLeftIcon(
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Question text
+                        Expanded(
+                          child: Text(
+                            question,
+                            style: const TextStyle(
+                              fontFamily: 'Alegreya',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+
+                        // "✨ New" badge for first item
+                        if (isFirst) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.08),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '✨',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'New',
+                                  style: TextStyle(
+                                    fontFamily: 'Alegreya',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Divider between items (not after last)
+                if (!isLast)
+                  Container(
+                    height: 1,
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+              ],
+            );
+          }),
+        ],
+      ),
     );
   }
 }
@@ -274,16 +404,12 @@ class _TypingIndicator extends StatelessWidget {
         children: [
           // Speaker name
           Padding(
-            padding: const EdgeInsets.only(left: 16, bottom: 4),
+            padding: const EdgeInsets.only(left: 16, bottom: 12),
             child: Text(
-              'Sathya Sai Baba',
-              style: TextStyle(
-                fontFamily: 'Alegreya',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withOpacity(0.6),
-                height: 1.25,
-              ),
+              'Kṛṣṇa',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppTheme.tertiaryWhite,
+                  ),
             ),
           ),
 
@@ -292,15 +418,12 @@ class _TypingIndicator extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Text(
+                Text(
                   'Pondering',
-                  style: TextStyle(
-                    fontFamily: 'Alegreya',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                    height: 1.25,
-                  ),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
                 ),
                 const SizedBox(width: 8),
                 // Colored bouncing dots matching web

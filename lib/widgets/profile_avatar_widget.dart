@@ -122,13 +122,13 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Mute/Unmute Audio
+              // Mute/Unmute Music
               if (widget.onMusicToggle != null) ...[
                 _buildDropdownItem(
                   icon: widget.isMusicMuted
-                      ? Icons.volume_off_outlined
-                      : Icons.volume_up_outlined,
-                  title: widget.isMusicMuted ? 'Unmute Audio' : 'Mute Audio',
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  title: widget.isMusicMuted ? 'Unmute Music' : 'Mute Music',
                   onTap: () {
                     _removeDropdown();
                     widget.onMusicToggle?.call();
@@ -145,20 +145,6 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
                   onTap: () {
                     _removeDropdown();
                     widget.onRecordTap?.call();
-                  },
-                ),
-                _buildDivider(),
-              ],
-
-              // Change Language
-              if (widget.onLanguageTap != null) ...[
-                _buildDropdownItem(
-                  icon: Icons.language_outlined,
-                  title: 'Language',
-                  subtitle: widget.currentLanguage,
-                  onTap: () {
-                    _removeDropdown();
-                    widget.onLanguageTap?.call();
                   },
                 ),
                 _buildDivider(),
@@ -323,7 +309,7 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
     bool isDestructive = false,
   }) {
     final color = isDestructive
-        ? const Color(0xFFfca5a5) // red-300
+        ? const Color(0xFFef4444) // red-500 (darker)
         : Colors.white;
 
     return GestureDetector(
