@@ -151,6 +151,20 @@ class LiveKitService {
       // Force speaker output after connection (LiveKit defaults to earpiece)
       await _forceSpeakerOutput();
 
+      // Log all remote participants for debugging
+      debugPrint(
+          '🔍 Remote participants in room: ${_room!.remoteParticipants.length}');
+      for (final participant in _room!.remoteParticipants.values) {
+        debugPrint('   👤 Participant: ${participant.identity}');
+        debugPrint('      Attributes: ${participant.attributes}');
+        debugPrint(
+            '      Track publications: ${participant.trackPublications.length}');
+        for (final pub in participant.trackPublications.values) {
+          debugPrint(
+              '         Track: ${pub.kind} - ${pub.source} - subscribed: ${pub.subscribed}');
+        }
+      }
+
       // Check if agent is already in room
       for (final participant in _room!.remoteParticipants.values) {
         if (_isAgent(participant)) {
@@ -260,6 +274,8 @@ class LiveKitService {
       ..on<TrackSubscribedEvent>((event) async {
         debugPrint(
             '🎵 LiveKit: Track subscribed: ${event.track.kind} from ${event.participant.identity}');
+        debugPrint(
+            '   Track details: source=${event.publication.source}, sid=${event.track.sid}');
         // Stop WebRTC audio playback - Unity plays audio via PCM data channel
         if (event.track is RemoteAudioTrack && _isAgent(event.participant)) {
           try {
@@ -273,6 +289,8 @@ class LiveKitService {
         }
       })
       ..on<TrackPublishedEvent>((event) async {
+        debugPrint(
+            '📢 Track PUBLISHED: kind=${event.publication.kind}, source=${event.publication.source}, from=${event.participant.identity}');
         // Unsubscribe from audio tracks to prevent WebRTC audio
         if (event.publication.kind == TrackType.AUDIO) {
           debugPrint(
@@ -283,6 +301,10 @@ class LiveKitService {
             debugPrint('⚠️ Error unsubscribing: $e');
           }
         }
+      })
+      ..on<TrackUnpublishedEvent>((event) {
+        debugPrint(
+            '📤 Track UNPUBLISHED: kind=${event.publication.kind}, from=${event.participant.identity}');
       })
       ..on<ActiveSpeakersChangedEvent>((event) {
         bool isAgentSpeaking = false;
@@ -359,8 +381,19 @@ class LiveKitService {
     final topic = event.topic;
     final participantIdentity = event.participant?.identity ?? 'unknown';
 
+    // Log ALL data received for debugging
     debugPrint(
-        '📨 Data received - Topic: $topic, From: $participantIdentity, Length: ${event.data.length}');
+        '📨 DATA RECEIVED - Topic: "$topic", From: $participantIdentity, Length: ${event.data.length} bytes');
+
+    // Try to decode and log first 100 chars for debugging
+    try {
+      final decoded = utf8.decode(event.data);
+      final preview =
+          decoded.length > 100 ? '${decoded.substring(0, 100)}...' : decoded;
+      debugPrint('📨 DATA CONTENT: $preview');
+    } catch (_) {
+      debugPrint('📨 DATA CONTENT: [binary data, ${event.data.length} bytes]');
+    }
 
     // Handle chat messages (text responses)
     if (topic == 'lk.chat' || topic == 'chat') {
@@ -374,10 +407,13 @@ class LiveKitService {
     }
     // Handle PCM audio for Unity lip-sync
     else if (topic == 'audio_pcm') {
+      debugPrint('🎵 AUDIO_PCM topic received! Processing...');
       final audioData = event.data is Uint8List
           ? event.data as Uint8List
           : Uint8List.fromList(event.data);
       _handleAudioPcm(audioData, participantIdentity);
+    } else {
+      debugPrint('⚠️ Unknown/unhandled topic: "$topic"');
     }
   }
 

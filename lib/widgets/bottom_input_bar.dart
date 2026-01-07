@@ -278,14 +278,19 @@ class _BottomInputBarState extends State<BottomInputBar> {
 
   /// Chat Input UI - text input with mic + send, and Voice Call button
   Widget _buildChatInputUI() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // Input container - takes ~70% width
-        Expanded(
-          flex: 7,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 4),
+    // Determine which buttons to show
+    final bool showChatIcon = widget.showChatButton &&
+        (widget.textController.text.trim().isEmpty ||
+            widget.isGenerating ||
+            widget.isAudioPlaying);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Input container - expands to fill available space
+          Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(
@@ -453,78 +458,87 @@ class _BottomInputBarState extends State<BottomInputBar> {
               ),
             ),
           ),
+
+          // Voice Call button - shows in different positions based on context
+          // When showChatButton=true AND chat icon showing: Voice is first, Chat is second
+          // When showChatButton=false OR chat icon hidden: Voice takes the rightmost slot
+          if (widget.showChatButton && showChatIcon) ...[
+            // Main screen with chat icon: Voice button first
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: _buildVoiceCallButton(),
+            ),
+            // Chat button second (rightmost)
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: GestureDetector(
+                onTap: widget.onChatButtonTap,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0x28FFFFFF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x40FFFFFF),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: const Center(
+                        child: TextChatIcon(size: 18),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            // Chat sidebar OR main screen without chat icon: Voice takes rightmost position
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: _buildVoiceCallButton(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoiceCallButton() {
+    return AnimatedStarBorder(
+      color: const Color(0x99FFFFFF),
+      speed: const Duration(seconds: 8),
+      child: Tooltip(
+        message: 'Voice Call',
+        child: GestureDetector(
+          onTap: widget.onVoiceCallTap,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0x28FFFFFF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0x40FFFFFF),
+                    width: 0.5,
+                  ),
+                ),
+                child: const Center(
+                  child: VoiceModeIcon(size: 20),
+                ),
+              ),
+            ),
+          ),
         ),
-
-        // Voice Call button (LiveKit) - hide when chat screen is open
-        if (widget.showChatButton)
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: AnimatedStarBorder(
-              color: const Color(0x99FFFFFF),
-              speed: const Duration(seconds: 8),
-              child: Tooltip(
-                message: 'Voice Call',
-                child: GestureDetector(
-                  onTap: widget.onVoiceCallTap,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        height: 48,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0x28FFFFFF),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0x40FFFFFF),
-                            width: 0.5,
-                          ),
-                        ),
-                        child: const Center(
-                          child: VoiceModeIcon(size: 20),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-        // Chat button - show when: text empty OR pondering OR streaming
-        if (widget.showChatButton &&
-            (widget.textController.text.trim().isEmpty ||
-                widget.isGenerating ||
-                widget.isAudioPlaying))
-          Padding(
-            padding: const EdgeInsets.only(left: 10, right: 4),
-            child: GestureDetector(
-              onTap: widget.onChatButtonTap,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0x28FFFFFF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0x40FFFFFF),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: const Center(
-                      child: TextChatIcon(size: 18),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }

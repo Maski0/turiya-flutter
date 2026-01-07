@@ -95,7 +95,7 @@ class ChatMessage {
     if (messageType == 'human') {
       messageType = 'user';
     }
-
+    
     // Parse content - if it's AI message with JSON, extract the response
     String content = json['content'] ?? '';
     if (messageType == 'ai' && content.isNotEmpty) {
@@ -115,7 +115,7 @@ class ChatMessage {
     if (json['created_at'] != null) {
       parsedTimestamp = DateTime.tryParse(json['created_at']);
     }
-
+    
     return ChatMessage(
       id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
       content: content,
@@ -137,7 +137,7 @@ class ChatMessage {
       'isPlayed': isPlayed,
     };
   }
-
+  
   /// Create a copy of this message with updated fields
   ChatMessage copyWith({
     String? id,

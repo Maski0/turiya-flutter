@@ -191,9 +191,9 @@ class _MessageItem extends StatelessWidget {
           child: Text(
             message.content,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w500,
                   height: 1.25,
-                ),
+            ),
           ),
         ),
       ),
@@ -211,7 +211,7 @@ class _MessageItem extends StatelessWidget {
             'Kṛṣṇa',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: AppTheme.tertiaryWhite,
-                ),
+            ),
           ),
         ),
 
@@ -221,9 +221,9 @@ class _MessageItem extends StatelessWidget {
           child: Text(
             message.content,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w500,
                   height: 1.4,
-                ),
+            ),
           ),
         ),
 
@@ -238,13 +238,13 @@ class _MessageItem extends StatelessWidget {
                 onTap: () async {
                   await Clipboard.setData(ClipboardData(text: message.content));
                   if (context.mounted) {
-                    ToastUtils.showSuccess(context, 'Copied to clipboard');
+                  ToastUtils.showSuccess(context, 'Copied to clipboard');
                   }
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: CopyIcon(
-                    size: 18,
+                child: CopyIcon(
+                  size: 18,
                     color: AppTheme.subtleWhite,
                   ),
                 ),
@@ -409,7 +409,7 @@ class _TypingIndicator extends StatelessWidget {
               'Kṛṣṇa',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: AppTheme.tertiaryWhite,
-                  ),
+              ),
             ),
           ),
 
@@ -421,9 +421,9 @@ class _TypingIndicator extends StatelessWidget {
                 Text(
                   'Pondering',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w500,
                         height: 1.4,
-                      ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 // Colored bouncing dots matching web

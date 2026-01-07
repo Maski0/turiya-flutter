@@ -413,21 +413,21 @@ class _ProfileMenuState extends State<ProfileMenu> {
 
   Widget _buildVolumeSlider() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0x14FFFFFF),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0x14FFFFFF),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
           Icon(
             _musicVolume == 0 ? Icons.volume_off : Icons.volume_up,
-            color: AppTheme.secondaryWhite,
+                        color: AppTheme.secondaryWhite,
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -440,15 +440,15 @@ class _ProfileMenuState extends State<ProfileMenu> {
                 overlayColor: Colors.white.withOpacity(0.1),
                 trackHeight: 4,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              ),
+            ),
               child: Slider(
                 value: _musicVolume,
                 min: 0,
                 max: 1,
                 onChanged: (value) {
-                  setState(() {
+                    setState(() {
                     _musicVolume = value;
-                  });
+                    });
                   BackgroundAudioService().setVolume(value);
                 },
               ),
@@ -457,14 +457,14 @@ class _ProfileMenuState extends State<ProfileMenu> {
           const SizedBox(width: 8),
           SizedBox(
             width: 36,
-            child: Text(
+                    child: Text(
               '${(_musicVolume * 100).round()}%',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppTheme.tertiaryWhite,
-                  ),
+                          ),
             ),
           ),
-        ],
+      ],
       ),
     );
   }

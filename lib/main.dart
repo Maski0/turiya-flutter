@@ -306,17 +306,22 @@ class _MainScreenState extends State<_MainScreen>
 
     _liveKitService.onConnectionStateChanged = (state) {
       if (mounted) {
-        setState(() {
-          _isLiveKitConnected = state == 'connected';
-          _isLiveKitConnecting =
-              state == 'connecting' || state == 'reconnecting';
-        });
+        final newConnected = state == 'connected';
+        final newConnecting = state == 'connecting' || state == 'reconnecting';
+        // Only update if state actually changed to avoid unnecessary rebuilds
+        if (_isLiveKitConnected != newConnected ||
+            _isLiveKitConnecting != newConnecting) {
+          setState(() {
+            _isLiveKitConnected = newConnected;
+            _isLiveKitConnecting = newConnecting;
+          });
+        }
         print('🎤 LiveKit connection state: $state');
       }
     };
 
     _liveKitService.onAgentConnected = () {
-      if (mounted) {
+      if (mounted && !_agentConnected) {
         setState(() {
           _agentConnected = true;
         });
@@ -327,7 +332,7 @@ class _MainScreenState extends State<_MainScreen>
     };
 
     _liveKitService.onAgentDisconnected = () {
-      if (mounted) {
+      if (mounted && _agentConnected) {
         setState(() {
           _agentConnected = false;
         });
@@ -336,7 +341,7 @@ class _MainScreenState extends State<_MainScreen>
     };
 
     _liveKitService.onAgentSpeakingChanged = (isSpeaking) {
-      if (mounted) {
+      if (mounted && _isAudioPlaying != isSpeaking) {
         setState(() {
           _isAudioPlaying = isSpeaking;
         });
@@ -1513,9 +1518,8 @@ class _MainScreenState extends State<_MainScreen>
                         child: SafeArea(
                           bottom: true,
                           child: Padding(
-                            // Reduce bottom margin for voice mode buttons
-                            padding: EdgeInsets.only(
-                                bottom: _isLiveKitConnected ? 12 : 32),
+                            // Consistent bottom margin to avoid UI shift during connection
+                            padding: const EdgeInsets.only(bottom: 28),
                             child: BottomInputBar(
                               textController: _textController,
                               focusNode: _textFocusNode,
@@ -1742,19 +1746,19 @@ class _MainScreenState extends State<_MainScreen>
         }
       } else {
         if (mounted) {
+          setState(() {
+            _isLiveKitConnecting = false;
+          });
           ToastUtils.showError(context, 'Failed to connect voice');
         }
       }
     } catch (e) {
       print('❌ LiveKit connection error: $e');
       if (mounted) {
-        ToastUtils.showError(context, 'Voice connection failed');
-      }
-    } finally {
-      if (mounted) {
         setState(() {
           _isLiveKitConnecting = false;
         });
+        ToastUtils.showError(context, 'Voice connection failed');
       }
     }
   }
