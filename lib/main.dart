@@ -213,6 +213,8 @@ class _MainScreenState extends State<_MainScreen>
   bool _pendingScreenRecording = false;
   String _recordingStatusMessage = ''; // For showing status in top bar
   String? _savedRecordingPath; // Path to saved recording
+  double?
+      _expectedRecordingDurationSeconds; // Expected duration from audio response
 
   @override
   void initState() {
@@ -914,9 +916,9 @@ class _MainScreenState extends State<_MainScreen>
                       // Update Unity avatar to speaking state
                       _updateUnityAvatarState();
 
-                      // Start pending recording now that Krishna is speaking
+                      // Start pending recording BEFORE audio plays (await it!)
                       if (_pendingScreenRecording) {
-                        _startPendingRecording();
+                        await _startPendingRecording();
                       }
                     }
 
@@ -946,6 +948,9 @@ class _MainScreenState extends State<_MainScreen>
                     audioDuration += 0.5;
                     print(
                         '📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
+
+                    // Store expected recording duration (audio + 1s buffer at end)
+                    _expectedRecordingDurationSeconds = audioDuration + 1.0;
 
                     if (_currentAlignment == null ||
                         _currentAlignment!.characterEndTimesSeconds.isEmpty) {
@@ -2250,10 +2255,14 @@ class _MainScreenState extends State<_MainScreen>
       });
 
       // Force audio back to speaker (recording with mic changes audio session)
+      // Call twice with delay to ensure it takes effect
       if (Platform.isIOS || Platform.isAndroid) {
         try {
           await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Forced audio output to speaker after recording started');
+          debugPrint('🔊 Forced audio output to speaker (1st call)');
+          await Future.delayed(const Duration(milliseconds: 100));
+          await Hardware.instance.setSpeakerphoneOn(true);
+          debugPrint('🔊 Forced audio output to speaker (2nd call)');
         } catch (e) {
           debugPrint('⚠️ Error forcing speaker output: $e');
         }
@@ -2285,6 +2294,35 @@ class _MainScreenState extends State<_MainScreen>
   /// Stop recording and show UI again
   Future<void> _stopRecordingAndShowUI() async {
     if (!_isScreenRecording) return;
+
+    // Wait for expected recording duration if we have it (audio duration + buffer)
+    if (_expectedRecordingDurationSeconds != null &&
+        _recordingStartTime != null) {
+      final expectedDuration = Duration(
+          milliseconds: (_expectedRecordingDurationSeconds! * 1000).toInt());
+      final elapsed = DateTime.now().difference(_recordingStartTime!);
+      if (elapsed < expectedDuration) {
+        final remaining = expectedDuration - elapsed;
+        debugPrint(
+            '⏳ Waiting ${remaining.inMilliseconds}ms for expected recording duration (audio: ${_expectedRecordingDurationSeconds}s)');
+        await Future.delayed(remaining);
+      }
+    } else {
+      // Fallback: ensure minimum recording duration of 5 seconds
+      const minRecordingDuration = Duration(seconds: 5);
+      if (_recordingStartTime != null) {
+        final elapsed = DateTime.now().difference(_recordingStartTime!);
+        if (elapsed < minRecordingDuration) {
+          final remaining = minRecordingDuration - elapsed;
+          debugPrint(
+              '⏳ Waiting ${remaining.inMilliseconds}ms for minimum recording duration');
+          await Future.delayed(remaining);
+        }
+      }
+    }
+
+    // Clear the expected duration
+    _expectedRecordingDurationSeconds = null;
 
     setState(() {
       _recordingStatusMessage = 'Saving...';
