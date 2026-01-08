@@ -2282,13 +2282,13 @@ class _MainScreenState extends State<_MainScreen>
           onTap: () => Navigator.of(dialogContext).pop(false),
           child: Stack(
             children: [
-              // Blurred background overlay - covers entire screen including all UI
+              // Blurred background overlay - same as login modal
               Positioned.fill(
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                   child: Container(
-                    // White overlay for cleaner blur effect
-                    color: const Color(0x20FFFFFF),
+                    // Very subtle white like login modal
+                    color: const Color(0x03FFFFFF),
                   ),
                 ),
               ),
