@@ -1193,6 +1193,25 @@ class _MainScreenState extends State<_MainScreen>
                           ),
                         ),
 
+                      // Recording status indicator - centered at top
+                      if (!_showMenuDrawer &&
+                          (_pendingScreenRecording ||
+                              _isScreenRecording ||
+                              _recordingStatusMessage.isNotEmpty))
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 20),
+                              child: Center(
+                                child: _buildRecordingStatus(),
+                              ),
+                            ),
+                          ),
+                        ),
+
                       // Top bar with menu and login
                       // Hide when menu drawer is open
                       if (!_showMenuDrawer)
@@ -1268,14 +1287,12 @@ class _MainScreenState extends State<_MainScreen>
                                           ),
                                         )
                                       else
-                                        const SizedBox(width: 48), // Placeholder to maintain spacing
+                                        const SizedBox(
+                                            width:
+                                                48), // Placeholder to maintain spacing
 
-                                      // Center - Recording status indicator (wrapped in Expanded for centering)
-                                      Expanded(
-                                        child: Center(
-                                          child: _buildRecordingStatus(),
-                                        ),
-                                      ),
+                                      // Spacer to push profile to the right
+                                      const Spacer(),
 
                                       // Right side - Profile (always when authenticated)
                                       BlocBuilder<AuthBloc, AuthState>(
