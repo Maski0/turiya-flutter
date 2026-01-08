@@ -2322,23 +2322,29 @@ class _MainScreenState extends State<_MainScreen>
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Header with title and red dot
+                            // Header with title, red dot, and close button
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Record next conversation?',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge!
-                                      .copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                Expanded(
+                                  child: Text(
+                                    'Record next conversation?',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge!
+                                        .copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
                                 ),
+                                const SizedBox(width: 12),
+                                // Red dot
                                 Container(
                                   width: 12,
                                   height: 12,
+                                  margin: const EdgeInsets.only(top: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.red,
                                     shape: BoxShape.circle,
@@ -2349,6 +2355,31 @@ class _MainScreenState extends State<_MainScreen>
                                         spreadRadius: 1,
                                       ),
                                     ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Close button
+                                GestureDetector(
+                                  onTap: () =>
+                                      Navigator.of(dialogContext).pop(false),
+                                  child: Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x14FFFFFF),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: const Color(0x14FFFFFF),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2423,55 +2454,6 @@ class _MainScreenState extends State<_MainScreen>
                                                     .titleLarge!
                                                     .copyWith(
                                                       color: Colors.black,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      height: 1.75,
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  // Skip button (glass style)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(
-                                          sigmaX: 16, sigmaY: 16),
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(false),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 24,
-                                              vertical: 12,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0x14FFFFFF),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: const Color(0x14FFFFFF),
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                'Skip',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleLarge!
-                                                    .copyWith(
-                                                      color: Colors.white,
                                                       fontWeight:
                                                           FontWeight.w500,
                                                       height: 1.75,
