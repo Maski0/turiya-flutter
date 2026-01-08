@@ -1268,10 +1268,14 @@ class _MainScreenState extends State<_MainScreen>
                                           ),
                                         )
                                       else
-                                        const SizedBox.shrink(),
+                                        const SizedBox(width: 48), // Placeholder to maintain spacing
 
-                                      // Center - Recording status indicator
-                                      _buildRecordingStatus(),
+                                      // Center - Recording status indicator (wrapped in Expanded for centering)
+                                      Expanded(
+                                        child: Center(
+                                          child: _buildRecordingStatus(),
+                                        ),
+                                      ),
 
                                       // Right side - Profile (always when authenticated)
                                       BlocBuilder<AuthBloc, AuthState>(
