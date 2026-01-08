@@ -2210,65 +2210,82 @@ class _MainScreenState extends State<_MainScreen>
     });
   }
 
-  /// Request permissions for recording (called from popup)
+  /// Request all permissions for recording (called from popup)
   Future<bool> _requestRecordingPermissions(BuildContext dialogContext) async {
-    // Request microphone permission for audio recording
-    var micStatus = await Permission.microphone.status;
+    List<String> deniedPermissions = [];
 
-    // If not granted, request permission first (shows native iOS popup)
+    // 1. Request microphone permission for audio recording
+    var micStatus = await Permission.microphone.status;
     if (!micStatus.isGranted) {
       micStatus = await Permission.microphone.request();
     }
-
-    // If still not granted after request, show settings dialog only if permanently denied
     if (!micStatus.isGranted) {
       if (micStatus.isPermanentlyDenied) {
-        // Close the recording popup first
-        Navigator.of(dialogContext).pop(false);
+        deniedPermissions.add('Microphone');
+      }
+    }
 
-        if (mounted) {
-          final shouldOpenSettings = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.white.withOpacity(0.1)),
-              ),
-              title: const Text('Microphone Permission',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-              content: const Text(
-                'Microphone access is needed for recording audio.\n\n'
-                'Please enable it in Settings > Turiya > Microphone.',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child:
-                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Open Settings',
-                      style: TextStyle(color: Color(0xFF22C55E))),
-                ),
-              ],
-            ),
-          );
-          if (shouldOpenSettings == true) {
-            await openAppSettings();
-          }
-        }
-        return false;
+    // 2. Request photos permission for saving recordings
+    var photosStatus = await Permission.photos.status;
+    if (!photosStatus.isGranted) {
+      photosStatus = await Permission.photos.request();
+    }
+    if (!photosStatus.isGranted) {
+      if (photosStatus.isPermanentlyDenied) {
+        deniedPermissions.add('Photos');
       }
-      // User denied but not permanently - continue without audio
+    }
+
+    // If any permissions are permanently denied, show settings dialog
+    if (deniedPermissions.isNotEmpty) {
+      // Close the recording popup first
+      Navigator.of(dialogContext).pop(false);
+
       if (mounted) {
-        ToastUtils.showInfo(context, 'Recording will proceed without audio');
+        final permissionsList = deniedPermissions.join(', ');
+        final shouldOpenSettings = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.white.withOpacity(0.1)),
+            ),
+            title: const Text('Permissions Required',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            content: Text(
+              'The following permissions are needed for recording:\n\n'
+              '• $permissionsList\n\n'
+              'Please enable them in Settings.',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child:
+                    Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Open Settings',
+                    style: TextStyle(color: Color(0xFF22C55E))),
+              ),
+            ],
+          ),
+        );
+        if (shouldOpenSettings == true) {
+          await openAppSettings();
+        }
       }
+      return false;
+    }
+
+    // Check if mic was denied (but not permanently) - recording can proceed without audio
+    if (!micStatus.isGranted && mounted) {
+      ToastUtils.showInfo(context, 'Recording will proceed without audio');
     }
 
     return true;
@@ -2388,7 +2405,7 @@ class _MainScreenState extends State<_MainScreen>
                               const SizedBox(height: 12),
                               // Permission note
                               Text(
-                                'You will be asked to allow microphone access for audio recording.',
+                                'You will be asked to allow microphone, screen capture, and photo library access.',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium!
