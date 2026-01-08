@@ -1193,25 +1193,6 @@ class _MainScreenState extends State<_MainScreen>
                           ),
                         ),
 
-                      // Recording status indicator - centered at top
-                      if (!_showMenuDrawer &&
-                          (_pendingScreenRecording ||
-                              _isScreenRecording ||
-                              _recordingStatusMessage.isNotEmpty))
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: SafeArea(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 20),
-                              child: Center(
-                                child: _buildRecordingStatus(),
-                              ),
-                            ),
-                          ),
-                        ),
-
                       // Top bar with menu and login
                       // Hide when menu drawer is open
                       if (!_showMenuDrawer)
@@ -1992,6 +1973,8 @@ class _MainScreenState extends State<_MainScreen>
       onRecordTap: _toggleScreenRecording,
       onLanguageTap: _showLanguageSelectionDialog,
       currentLanguage: _selectedLanguage == 'telugu' ? 'Telugu' : 'English',
+      isPendingRecording: _pendingScreenRecording,
+      isRecording: _isScreenRecording,
     );
   }
 

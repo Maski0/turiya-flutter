@@ -12,6 +12,8 @@ class ProfileAvatarWidget extends StatefulWidget {
   final VoidCallback? onRecordTap;
   final VoidCallback? onLanguageTap;
   final String? currentLanguage;
+  final bool isPendingRecording;
+  final bool isRecording;
 
   const ProfileAvatarWidget({
     super.key,
@@ -21,6 +23,8 @@ class ProfileAvatarWidget extends StatefulWidget {
     this.onRecordTap,
     this.onLanguageTap,
     this.currentLanguage,
+    this.isPendingRecording = false,
+    this.isRecording = false,
   });
 
   @override
@@ -219,79 +223,99 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
               opacity: _fadeAnimation,
               child: CompositedTransformTarget(
                 link: _layerLink,
-                child: GestureDetector(
-                  onTap: _toggleDropdown,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                      child: Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: const Color(0x1AFFFFFF),
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color: const Color(0x33FFFFFF),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // Credits display on the left
-                            Container(
-                              height: 52,
-                              alignment: Alignment.center,
-                              margin:
-                                  const EdgeInsets.only(left: 18, right: 10),
-                              child: Text(
-                                creditsText,
-                                textAlign: TextAlign.center,
-                                strutStyle: const StrutStyle(
-                                  forceStrutHeight: true,
-                                  height: 1.0,
-                                ),
-                                style: TextStyle(
-                                  fontFamily: AppTheme.fontFamily,
-                                  fontSize: isUnlimited ? 26 : 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.secondaryWhite,
-                                  height: 1.0,
-                                  leadingDistribution:
-                                      TextLeadingDistribution.even,
-                                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: _toggleDropdown,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: Container(
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: const Color(0x1AFFFFFF),
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: const Color(0x33FFFFFF),
+                                width: 1,
                               ),
                             ),
-                            // Profile image on the right (circular)
-                            Container(
-                              width: 40,
-                              height: 40,
-                              margin: const EdgeInsets.only(
-                                  right: 6, top: 6, bottom: 6),
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.blue,
-                              ),
-                              child: ClipOval(
-                                child: avatarUrl != null
-                                    ? Image.network(
-                                        avatarUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Credits display on the left
+                                Container(
+                                  height: 52,
+                                  alignment: Alignment.center,
+                                  margin: const EdgeInsets.only(
+                                      left: 18, right: 10),
+                                  child: Text(
+                                    creditsText,
+                                    textAlign: TextAlign.center,
+                                    strutStyle: const StrutStyle(
+                                      forceStrutHeight: true,
+                                      height: 1.0,
+                                    ),
+                                    style: TextStyle(
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontSize: isUnlimited ? 26 : 20,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.secondaryWhite,
+                                      height: 1.0,
+                                      leadingDistribution:
+                                          TextLeadingDistribution.even,
+                                    ),
+                                  ),
+                                ),
+                                // Profile image on the right (circular)
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  margin: const EdgeInsets.only(
+                                      right: 6, top: 6, bottom: 6),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.blue,
+                                  ),
+                                  child: ClipOval(
+                                    child: avatarUrl != null
+                                        ? Image.network(
+                                            avatarUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error,
+                                                    stackTrace) =>
                                                 _buildDefaultAvatar(
                                                     user.email ?? 'U', context),
-                                      )
-                                    : _buildDefaultAvatar(
-                                        user.email ?? 'U', context),
-                              ),
+                                          )
+                                        : _buildDefaultAvatar(
+                                            user.email ?? 'U', context),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    // Recording indicator dot below profile
+                    if (widget.isPendingRecording || widget.isRecording)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: widget.isPendingRecording
+                            ? _BlinkingRecordDot()
+                            : Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                      ),
+                  ],
                 ),
               ),
             );
@@ -376,6 +400,57 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
               ),
         ),
       ),
+    );
+  }
+}
+
+/// Blinking red dot for pending recording state
+class _BlinkingRecordDot extends StatefulWidget {
+  @override
+  State<_BlinkingRecordDot> createState() => _BlinkingRecordDotState();
+}
+
+class _BlinkingRecordDotState extends State<_BlinkingRecordDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _animation.value,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
     );
   }
 }
