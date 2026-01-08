@@ -28,7 +28,8 @@ class _OnboardingGateState extends State<OnboardingGate> {
 
     if (mounted) {
       setState(() {
-        _hasCompletedOnboarding = completed;
+        // Skip onboarding for testing - set to true to always skip
+        _hasCompletedOnboarding = true; // was: completed
         _isLoading = false;
       });
     }

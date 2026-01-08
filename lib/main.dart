@@ -2197,7 +2197,8 @@ class _MainScreenState extends State<_MainScreen>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                  child:
+                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
@@ -2217,7 +2218,8 @@ class _MainScreenState extends State<_MainScreen>
         final result = await Permission.microphone.request();
         if (!result.isGranted) {
           if (mounted) {
-            ToastUtils.showError(context, 'Microphone permission required for audio');
+            ToastUtils.showError(
+                context, 'Microphone permission required for audio');
           }
           // Continue anyway - recording will work without audio
         }
