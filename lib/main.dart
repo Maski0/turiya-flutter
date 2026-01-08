@@ -1209,6 +1209,8 @@ class _MainScreenState extends State<_MainScreen>
                                   Row(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       // Top left button - Hamburger menu OR Close button when chat is open
                                       // Hide during screen recording
@@ -1275,18 +1277,18 @@ class _MainScreenState extends State<_MainScreen>
                                       // Spacer to push profile to the right
                                       const Spacer(),
 
-                                      // Right side - Profile + Record button (like web mobile: flex-col-reverse)
+                                      // Right side - Record button + Profile (row layout)
                                       BlocBuilder<AuthBloc, AuthState>(
                                         builder: (context, state) {
                                           if (state is AuthAuthenticated &&
                                               !_isScreenRecording) {
-                                            return Column(
+                                            return Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
+                                                _buildRecordButton(),
+                                                const SizedBox(width: 12),
                                                 _buildCreditsAndProfile(
                                                     context),
-                                                const SizedBox(height: 12),
-                                                _buildRecordButton(),
                                               ],
                                             );
                                           }
@@ -2005,34 +2007,34 @@ class _MainScreenState extends State<_MainScreen>
               ),
             ),
             child: Center(
-              child: _isScreenRecording || _pendingScreenRecording
-                  ? Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    )
-                  : Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.red,
-                          width: 2,
-                        ),
-                      ),
-                      child: Container(
-                        margin: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+              // Record icon like web: red filled circle with outer ring
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.red,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: _isScreenRecording || _pendingScreenRecording
+                          ? BoxShape.rectangle
+                          : BoxShape.circle,
+                      borderRadius:
+                          _isScreenRecording || _pendingScreenRecording
+                              ? BorderRadius.circular(2)
+                              : null,
                     ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
