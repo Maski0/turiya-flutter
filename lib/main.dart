@@ -2294,181 +2294,186 @@ class _MainScreenState extends State<_MainScreen>
               Center(
                 child: GestureDetector(
                   onTap: () {}, // Prevent closing when tapping modal content
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 355),
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          // Same as login modal
-                          color: const Color(0x14FFFFFF),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            // Same as login modal
                             color: const Color(0x14FFFFFF),
-                            width: 1,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0x14FFFFFF),
+                              width: 1,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x14111111),
+                                blurRadius: 16,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14111111),
-                              blurRadius: 16,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Header with title, red dot, and close button
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Record next conversation?',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge!
-                                        .copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header with title, red dot, and close button
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Record next conversation?',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge!
+                                          .copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Red dot
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  margin: const EdgeInsets.only(top: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.red.withOpacity(0.4),
-                                        blurRadius: 8,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Close button
-                                GestureDetector(
-                                  onTap: () =>
-                                      Navigator.of(dialogContext).pop(false),
-                                  child: Container(
-                                    width: 28,
-                                    height: 28,
+                                  const SizedBox(width: 12),
+                                  // Red dot
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    margin: const EdgeInsets.only(top: 6),
                                     decoration: BoxDecoration(
-                                      color: const Color(0x14FFFFFF),
+                                      color: Colors.red,
                                       shape: BoxShape.circle,
-                                      border: Border.all(
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.red.withOpacity(0.4),
+                                          blurRadius: 8,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Close button
+                                  GestureDetector(
+                                    onTap: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
                                         color: const Color(0x14FFFFFF),
-                                        width: 1,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0x14FFFFFF),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.close,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
                                       ),
                                     ),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.close,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            // Description
-                            Text(
-                              'Your next conversation with Kṛṣṇa will be recorded and shared. This will include screen and audio.',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge!
-                                  .copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                            ),
-                            const SizedBox(height: 24),
-                            // Button container with glass effect (same as login modal)
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0x0DFFFFFF),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0x14FFFFFF),
-                                  width: 1,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x14111111),
-                                    blurRadius: 30,
-                                    offset: Offset(0, 4),
                                   ),
                                 ],
                               ),
-                              child: Column(
-                                children: [
-                                  // Record button (white like login button)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(
-                                          sigmaX: 16, sigmaY: 16),
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(true),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 24,
-                                              vertical: 12,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: const Color(0x33CCCCCC),
-                                                width: 1,
+                              const SizedBox(height: 16),
+                              // Description
+                              Text(
+                                'Your next conversation with Kṛṣṇa will be recorded and shared. This will include screen and audio.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge!
+                                    .copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                              ),
+                              const SizedBox(height: 24),
+                              // Button container with glass effect (same as login modal)
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x0DFFFFFF),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0x14FFFFFF),
+                                    width: 1,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x14111111),
+                                      blurRadius: 30,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  children: [
+                                    // Record button (white like login button)
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(
+                                            sigmaX: 16, sigmaY: 16),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: () =>
+                                                Navigator.of(dialogContext)
+                                                    .pop(true),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: Container(
+                                              width: double.infinity,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 24,
+                                                vertical: 12,
                                               ),
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                'Record',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleLarge!
-                                                    .copyWith(
-                                                      color: Colors.black,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      height: 1.75,
-                                                    ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color:
+                                                      const Color(0x33CCCCCC),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  'Record',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleLarge!
+                                                      .copyWith(
+                                                        color: Colors.black,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        height: 1.75,
+                                                      ),
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
