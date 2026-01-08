@@ -390,8 +390,18 @@ class _MainScreenState extends State<_MainScreen>
         // If transitioning to thinking (pondering) while audio was playing,
         // stop Unity audio immediately (user interrupted)
         if (state == AgentState.thinking && _isAudioPlaying) {
-          print('🛑 Interruption detected - stopping Unity audio before pondering');
+          print(
+              '🛑 Interruption detected - stopping Unity audio before pondering');
           _stopUnityAudio();
+        }
+
+        // Handle mic mute/unmute OUTSIDE setState (async operations)
+        if (state == AgentState.thinking || state == AgentState.speaking) {
+          // Mute mic during pondering/speaking
+          _muteMicForVoiceResponse();
+        } else if (state == AgentState.listening) {
+          // Restore mic when back to listening
+          _restoreMicAfterVoiceResponse();
         }
 
         setState(() {
@@ -400,22 +410,16 @@ class _MainScreenState extends State<_MainScreen>
             case AgentState.thinking:
               _isGenerating = true;
               _isAudioPlaying = false;
-              // Auto-mute mic when pondering (so it doesn't pick up noise)
-              _muteMicForVoiceResponse();
               break;
             case AgentState.speaking:
               _isGenerating = false;
               _isAudioPlaying = true;
-              // Keep mic muted while speaking
-              _muteMicForVoiceResponse();
               break;
             case AgentState.listening:
             case AgentState.disconnected:
             case AgentState.connecting:
               _isGenerating = false;
               _isAudioPlaying = false;
-              // Restore mic when response finishes
-              _restoreMicAfterVoiceResponse();
               break;
           }
         });
@@ -454,7 +458,8 @@ class _MainScreenState extends State<_MainScreen>
   /// Stop Unity audio playback immediately (for interruptions)
   void _stopUnityAudio() {
     try {
-      sendToUnity("Flutter", "OnAudioChunk", "START"); // Clears buffer, stops playback
+      sendToUnity(
+          "Flutter", "OnAudioChunk", "START"); // Clears buffer, stops playback
       sendToUnity("Flutter", "OnAudioChunk", "END"); // Signal stream end
       debugPrint('🛑 Unity audio stopped (interruption)');
     } catch (e) {
@@ -463,20 +468,22 @@ class _MainScreenState extends State<_MainScreen>
   }
 
   /// Auto-mute mic when voice response starts (pondering/speaking)
-  void _muteMicForVoiceResponse() {
+  Future<void> _muteMicForVoiceResponse() async {
     if (_liveKitService.isMicrophoneEnabled && !_micMutedForVoice) {
       _micMutedForVoice = true;
-      _liveKitService.setMicrophoneEnabled(false);
+      await _liveKitService.setMicrophoneEnabled(false);
       debugPrint('🎤 Auto-muted mic for voice response');
+      if (mounted) setState(() {}); // Update UI to reflect mic state
     }
   }
 
   /// Restore mic after voice response finishes
-  void _restoreMicAfterVoiceResponse() {
+  Future<void> _restoreMicAfterVoiceResponse() async {
     if (_micMutedForVoice) {
       _micMutedForVoice = false;
-      _liveKitService.setMicrophoneEnabled(true);
+      await _liveKitService.setMicrophoneEnabled(true);
       debugPrint('🎤 Restored mic after voice response');
+      if (mounted) setState(() {}); // Update UI to reflect mic state
     }
   }
 
