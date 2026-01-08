@@ -1676,14 +1676,10 @@ class _MainScreenState extends State<_MainScreen>
                     child: AnimatedSlide(
                       offset: _showRecordingPopup
                           ? Offset.zero
-                          : const Offset(0, -1),
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                      child: AnimatedOpacity(
-                        opacity: _showRecordingPopup ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        child: _buildSavedRecordingPopup(),
-                      ),
+                          : const Offset(0, -2),
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutCubic,
+                      child: _buildSavedRecordingPopup(),
                     ),
                   ),
               ], // Close outer Stack children
@@ -2448,7 +2444,7 @@ class _MainScreenState extends State<_MainScreen>
     });
   }
 
-  /// Build saved recording popup
+  /// Build saved recording popup with glass blur effect
   Widget _buildSavedRecordingPopup() {
     if (_savedRecordingPath == null) return const SizedBox.shrink();
 
@@ -2462,65 +2458,88 @@ class _MainScreenState extends State<_MainScreen>
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green.withOpacity(0.5)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
-                shape: BoxShape.circle,
+                color: const Color(0x14FFFFFF),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0x14FFFFFF),
+                  width: 1,
+                ),
               ),
-              child: const Icon(Icons.check, color: Colors.green, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  Text(
-                    'Recording Saved',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.green.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(Icons.check, color: Colors.green, size: 18),
                   ),
-                  Text(
-                    'Tap to view',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white.withOpacity(0.7),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Recording Saved',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tap to view',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withOpacity(0.6),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'View',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _hideRecordingPopup,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close,
+                          color: Colors.white.withOpacity(0.6), size: 18),
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'View',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _hideRecordingPopup,
-              child: Icon(Icons.close,
-                  color: Colors.white.withOpacity(0.5), size: 20),
-            ),
-          ],
+          ),
         ),
       ),
     );
