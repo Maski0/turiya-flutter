@@ -44,6 +44,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
 import 'theme/app_theme.dart';
 
+// Method channel for native audio control
+const _audioChannel = MethodChannel('com.turiya/audio');
+
 // TODO: REMOVE FOR PRODUCTION - Fix server SSL certificate chain instead
 class _DevHttpOverrides extends HttpOverrides {
   @override
@@ -2286,16 +2289,6 @@ class _MainScreenState extends State<_MainScreen>
     debugPrint('🎬 Waiting 500ms for UI fade animation...');
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // Force speaker BEFORE recording (to ensure correct audio route)
-    if (Platform.isIOS || Platform.isAndroid) {
-      try {
-        await Hardware.instance.setSpeakerphoneOn(true);
-        debugPrint('🔊 Pre-recording: Forced audio output to speaker');
-      } catch (e) {
-        debugPrint('⚠️ Error forcing speaker output: $e');
-      }
-    }
-
     // Start actual recording
     debugPrint('🎬 Calling startRecording() at ${DateTime.now()}');
     bool started = await _screenRecordingService.startRecording();
@@ -2307,15 +2300,19 @@ class _MainScreenState extends State<_MainScreen>
         _recordingStartTime = DateTime.now();
       });
 
-      // Force speaker AGAIN after recording starts (in case recording changed it)
-      if (Platform.isIOS || Platform.isAndroid) {
+      // Force speaker using native method channel (more reliable than Hardware.setSpeakerphoneOn)
+      if (Platform.isIOS) {
         try {
-          await Future.delayed(const Duration(milliseconds: 50));
-          await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Post-recording: Forced audio output to speaker (1st)');
           await Future.delayed(const Duration(milliseconds: 100));
+          await _audioChannel.invokeMethod('forceSpeaker');
+          debugPrint('🔊 Native: Forced audio output to speaker');
+        } catch (e) {
+          debugPrint('⚠️ Error forcing speaker via native: $e');
+        }
+      } else if (Platform.isAndroid) {
+        try {
           await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Post-recording: Forced audio output to speaker (2nd)');
+          debugPrint('🔊 Android: Forced audio output to speaker');
         } catch (e) {
           debugPrint('⚠️ Error forcing speaker output: $e');
         }
