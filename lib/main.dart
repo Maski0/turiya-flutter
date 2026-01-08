@@ -2611,7 +2611,8 @@ class _RecordingPermissionDialog extends StatefulWidget {
       _RecordingPermissionDialogState();
 }
 
-class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> {
+class _RecordingPermissionDialogState
+    extends State<_RecordingPermissionDialog> {
   bool _micGranted = false;
   bool _photosGranted = false;
   bool _isLoading = true;
@@ -2692,14 +2693,11 @@ class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> 
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
-          color: isGranted
-              ? const Color(0x1022C55E)
-              : const Color(0x10FFFFFF),
+          color: isGranted ? const Color(0x1022C55E) : const Color(0x10FFFFFF),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isGranted
-                ? const Color(0x3022C55E)
-                : const Color(0x20FFFFFF),
+            color:
+                isGranted ? const Color(0x3022C55E) : const Color(0x20FFFFFF),
             width: 1,
           ),
         ),
@@ -2731,19 +2729,17 @@ class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> 
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     description,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 13,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
                   ),
                 ],
               ),
@@ -2865,37 +2861,6 @@ class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> 
                               onTap: () =>
                                   _requestPermission(Permission.photos),
                             ),
-                            const SizedBox(height: 10),
-                            // Screen recording note (handled by iOS)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0x10FFFFFF),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0x20FFFFFF),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.info_outline,
-                                      color: Colors.white.withOpacity(0.6),
-                                      size: 20),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      'Screen capture permission will be requested when recording starts.',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.6),
-                                        fontSize: 13,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                           const SizedBox(height: 20),
                           // Record button
@@ -2931,13 +2896,16 @@ class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> 
                                     child: Center(
                                       child: Text(
                                         'Record',
-                                        style: TextStyle(
-                                          color: _allPermissionsGranted
-                                              ? Colors.black
-                                              : Colors.black.withOpacity(0.4),
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge!
+                                            .copyWith(
+                                              color: _allPermissionsGranted
+                                                  ? Colors.black
+                                                  : Colors.black
+                                                      .withOpacity(0.4),
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                       ),
                                     ),
                                   ),
