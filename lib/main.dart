@@ -2287,8 +2287,8 @@ class _MainScreenState extends State<_MainScreen>
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                   child: Container(
-                    // Darker overlay for stronger blur effect
-                    color: const Color(0x40000000),
+                    // White overlay for cleaner blur effect
+                    color: const Color(0x20FFFFFF),
                   ),
                 ),
               ),
