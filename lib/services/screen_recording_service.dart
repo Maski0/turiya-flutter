@@ -53,7 +53,10 @@ class ScreenRecordingService {
     return recordingsDir;
   }
 
-  /// Start native screen recording with audio
+  /// Start native screen recording (video only)
+  /// Note: iOS cannot capture app audio from within the app without a Broadcast Extension.
+  /// Recording video only avoids the earpiece issue.
+  /// For recording with Krishna's voice, users should use iOS Control Center screen recording.
   Future<bool> startRecording() async {
     if (_isRecording) {
       debugPrint('⚠️ Already recording');
@@ -61,29 +64,18 @@ class ScreenRecordingService {
     }
 
     try {
-      debugPrint('🎬 Starting native screen recording with audio...');
+      debugPrint('🎬 Starting native screen recording (video only)...');
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final videoName = 'turiya_recording_$timestamp';
 
-      // Record WITH audio - we'll handle speaker routing in main.dart
-      final started =
-          await FlutterScreenRecording.startRecordScreenAndAudio(videoName);
-      debugPrint('🎬 startRecordScreenAndAudio returned: $started');
+      // Record VIDEO ONLY to avoid earpiece issue
+      final started = await FlutterScreenRecording.startRecordScreen(videoName);
+      debugPrint('🎬 startRecordScreen returned: $started');
 
       if (started) {
         _isRecording = true;
-        debugPrint('✅ Native screen recording started (with audio)');
-        return true;
-      }
-
-      // Fallback to video-only if audio recording fails
-      debugPrint('🎬 Audio recording failed, trying video only...');
-      final startedNoAudio =
-          await FlutterScreenRecording.startRecordScreen(videoName);
-      if (startedNoAudio) {
-        _isRecording = true;
-        debugPrint('✅ Native screen recording started (video only fallback)');
+        debugPrint('✅ Native screen recording started (video only)');
         return true;
       }
 
