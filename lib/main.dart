@@ -175,6 +175,8 @@ class _MainScreenState extends State<_MainScreen>
   bool _isLiveKitConnecting = false;
   bool _isLiveKitDisconnecting = false;
   bool _agentConnected = false;
+  bool _musicMutedForVoice =
+      false; // Track if we muted music for voice response
 
   bool _isGenerating = false;
   bool _showLoginModal = false;
@@ -391,16 +393,22 @@ class _MainScreenState extends State<_MainScreen>
             case AgentState.thinking:
               _isGenerating = true;
               _isAudioPlaying = false;
+              // Auto-mute background music when pondering in voice mode
+              _muteBackgroundMusicForVoice();
               break;
             case AgentState.speaking:
               _isGenerating = false;
               _isAudioPlaying = true;
+              // Keep muted while speaking
+              _muteBackgroundMusicForVoice();
               break;
             case AgentState.listening:
             case AgentState.disconnected:
             case AgentState.connecting:
               _isGenerating = false;
               _isAudioPlaying = false;
+              // Restore background music when response finishes
+              _restoreBackgroundMusicAfterVoice();
               break;
           }
         });
@@ -436,6 +444,29 @@ class _MainScreenState extends State<_MainScreen>
 
   /// Updates Unity avatar state based on current Flutter app state
   /// - "listening" = default/idle state
+  /// Auto-mute background music when voice response starts (pondering/speaking)
+  void _muteBackgroundMusicForVoice() {
+    final backgroundAudio = BackgroundAudioService();
+    if (backgroundAudio.isPlaying && !_musicMutedForVoice) {
+      _musicMutedForVoice = true;
+      backgroundAudio.pause();
+      debugPrint('🔇 Auto-muted background music for voice response');
+    }
+  }
+
+  /// Restore background music after voice response finishes
+  void _restoreBackgroundMusicAfterVoice() {
+    final backgroundAudio = BackgroundAudioService();
+    if (_musicMutedForVoice) {
+      _musicMutedForVoice = false;
+      // Only restore if music was enabled before
+      if (backgroundAudio.isEnabled) {
+        backgroundAudio.play();
+        debugPrint('🔊 Restored background music after voice response');
+      }
+    }
+  }
+
   /// - "thinking" = when _isGenerating is true (pondering response)
   /// - "speaking" = when _isAudioPlaying is true (narrating response)
   void _updateUnityAvatarState() {

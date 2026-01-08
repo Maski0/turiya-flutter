@@ -4,7 +4,7 @@ description: Turiya - AI spiritual companion app
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+5
+version: 1.0.0+6
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
