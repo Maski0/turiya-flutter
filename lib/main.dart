@@ -205,8 +205,13 @@ class _MainScreenState extends State<_MainScreen>
   // Language selection
   String _selectedLanguage = 'telugu'; // 'telugu' or 'english'
 
-  // Hide everything mode (for taking Unity screenshots)
+  // Hide everything mode (for recording)
   bool _hideEverything = false;
+
+  // Pending recording - waiting for Krishna to speak
+  bool _pendingScreenRecording = false;
+  String _recordingStatusMessage = ''; // For showing status in top bar
+  String? _savedRecordingPath; // Path to saved recording
 
   @override
   void initState() {
@@ -907,6 +912,11 @@ class _MainScreenState extends State<_MainScreen>
 
                       // Update Unity avatar to speaking state
                       _updateUnityAvatarState();
+
+                      // Start pending recording now that Krishna is speaking
+                      if (_pendingScreenRecording) {
+                        _startPendingRecording();
+                      }
                     }
 
                     // Content is already parsed in ChatMessage.fromJson, use directly
@@ -996,6 +1006,11 @@ class _MainScreenState extends State<_MainScreen>
                             '🏁 END signal sent to Unity (audio playback complete)');
                       } catch (e) {
                         // Unity not available, ignore
+                      }
+
+                      // Auto-stop recording when Krishna finishes speaking
+                      if (_isScreenRecording) {
+                        _stopRecordingAndShowUI();
                       }
 
                       // Fade out user message bubble
@@ -1254,6 +1269,10 @@ class _MainScreenState extends State<_MainScreen>
                                         )
                                       else
                                         const SizedBox.shrink(),
+
+                                      // Center - Recording status indicator
+                                      _buildRecordingStatus(),
+
                                       // Right side - Profile (always when authenticated)
                                       BlocBuilder<AuthBloc, AuthState>(
                                         builder: (context, state) {
@@ -1609,12 +1628,12 @@ class _MainScreenState extends State<_MainScreen>
   Future<void> _startListening() async {
     // Request microphone permission
     var status = await Permission.microphone.status;
-    
+
     // If not granted, request permission first (shows native iOS popup)
     if (!status.isGranted) {
       status = await Permission.microphone.request();
     }
-    
+
     // If still not granted, show settings dialog only if permanently denied
     if (!status.isGranted) {
       if (status.isPermanentlyDenied) {
@@ -1640,7 +1659,8 @@ class _MainScreenState extends State<_MainScreen>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                  child:
+                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
@@ -2095,181 +2115,251 @@ class _MainScreenState extends State<_MainScreen>
   }
 
   Future<void> _toggleScreenRecording() async {
-    if (_isScreenRecording) {
-      // Show processing dialog
-      if (!mounted) return;
-
-      String processingMessage = 'Processing frames...';
-
-      // Show modal dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              // Update dialog state when processing message changes
-              _screenRecordingService.setProcessingCallback((message) {
-                processingMessage = message;
-                setDialogState(() {});
-              });
-
-              return WillPopScope(
-                onWillPop: () async => false,
-                child: AlertDialog(
-                  backgroundColor: Colors.black.withOpacity(0.9),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        processingMessage,
-                        style: AppTheme.body(context),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      );
-
-      // Stop recording
-      String? path = await _screenRecordingService.stopRecording();
-
-      // Close processing dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      // Cancel auto-stop timer
-      _recordingAutoStopTimer?.cancel();
-      _recordingAutoStopTimer = null;
-
+    // If pending, cancel it
+    if (_pendingScreenRecording) {
       setState(() {
-        _isScreenRecording = false;
-        _recordingStartTime = null;
+        _pendingScreenRecording = false;
+        _recordingStatusMessage = '';
       });
-
-      _removeRecordingIndicator();
-
-      if (path != null && mounted) {
-        // Show preview overlay
-        await Future.delayed(const Duration(milliseconds: 300));
-        if (mounted) {
-          RecordingPreviewOverlay.show(context, path);
-        }
-      } else {
-        if (mounted) {
-          ToastUtils.showError(context, 'Failed to save recording');
-        }
+      if (mounted) {
+        ToastUtils.showInfo(context, 'Recording cancelled');
       }
-    } else {
-      // Request microphone permission for audio recording
-      var micStatus = await Permission.microphone.status;
-      
-      // If not granted, request permission first (shows native iOS popup)
-      if (!micStatus.isGranted) {
-        micStatus = await Permission.microphone.request();
-      }
-      
-      // If still not granted after request, show settings dialog only if permanently denied
-      if (!micStatus.isGranted) {
-        if (micStatus.isPermanentlyDenied) {
-          if (mounted) {
-            final shouldOpenSettings = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: const Color(0xFF1A1A1A),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.white.withOpacity(0.1)),
-                ),
-                title: const Text('Microphone Permission',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                content: const Text(
-                  'Microphone access is needed for recording audio.\n\n'
-                  'Please enable it in Settings > Turiya > Microphone.',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Open Settings',
-                        style: TextStyle(color: Color(0xFF22C55E))),
-                  ),
-                ],
+      return;
+    }
+
+    if (_isScreenRecording) {
+      // Stop recording and show UI
+      await _stopRecordingAndShowUI();
+      return;
+    }
+
+    // Request microphone permission for audio recording
+    var micStatus = await Permission.microphone.status;
+
+    // If not granted, request permission first (shows native iOS popup)
+    if (!micStatus.isGranted) {
+      micStatus = await Permission.microphone.request();
+    }
+
+    // If still not granted after request, show settings dialog only if permanently denied
+    if (!micStatus.isGranted) {
+      if (micStatus.isPermanentlyDenied) {
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.white.withOpacity(0.1)),
               ),
-            );
-            if (shouldOpenSettings == true) {
-              await openAppSettings();
-            }
-          }
-          return;
-        }
-        // User denied but not permanently - continue without audio
-        if (mounted) {
-          ToastUtils.showInfo(context, 'Recording will proceed without audio');
-        }
-      }
-
-      // Start recording
-      bool started = await _screenRecordingService.startRecording();
-
-      if (started) {
-        setState(() {
-          _isScreenRecording = true;
-          _recordingStartTime = DateTime.now();
-        });
-
-        // Start auto-stop timer (max recording duration)
-        _recordingAutoStopTimer = Timer(
-          Duration(minutes: _maxRecordingDurationMinutes),
-          () async {
-            if (_isScreenRecording && mounted) {
-              debugPrint(
-                  '⏱️ Auto-stopping recording after $_maxRecordingDurationMinutes minutes');
-              await _toggleScreenRecording();
-              if (mounted) {
-                ToastUtils.showInfo(
-                  context,
-                  'Recording stopped (max duration reached)',
-                );
-              }
-            }
-          },
-        );
-
-        // Show recording indicator
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (mounted) {
-          _showRecordingIndicator();
-        }
-      } else {
-        if (mounted) {
-          ToastUtils.showError(
-            context,
-            'Failed to start recording. Please check permissions.',
+              title: const Text('Microphone Permission',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              content: const Text(
+                'Microphone access is needed for recording audio.\n\n'
+                'Please enable it in Settings > Turiya > Microphone.',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child:
+                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Color(0xFF22C55E))),
+                ),
+              ],
+            ),
           );
+          if (shouldOpenSettings == true) {
+            await openAppSettings();
+          }
         }
+        return;
+      }
+      // User denied but not permanently - continue without audio
+      if (mounted) {
+        ToastUtils.showInfo(context, 'Recording will proceed without audio');
       }
     }
+
+    // Set pending state - will start recording when Krishna speaks
+    setState(() {
+      _pendingScreenRecording = true;
+      _recordingStatusMessage = 'Waiting for response...';
+    });
+
+    if (mounted) {
+      ToastUtils.showInfo(context, 'Recording will start when Krishna speaks');
+    }
+  }
+
+  /// Start recording when Krishna starts speaking (called from BlocListener)
+  Future<void> _startPendingRecording() async {
+    if (!_pendingScreenRecording) return;
+
+    setState(() {
+      _pendingScreenRecording = false;
+      _hideEverything = true; // Hide UI
+      _recordingStatusMessage = 'Recording...';
+    });
+
+    // Wait for UI to fade out
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    // Start actual recording
+    bool started = await _screenRecordingService.startRecording();
+
+    if (started) {
+      setState(() {
+        _isScreenRecording = true;
+        _recordingStartTime = DateTime.now();
+      });
+
+      // Start auto-stop timer (max recording duration)
+      _recordingAutoStopTimer = Timer(
+        Duration(minutes: _maxRecordingDurationMinutes),
+        () async {
+          if (_isScreenRecording && mounted) {
+            debugPrint(
+                '⏱️ Auto-stopping recording after $_maxRecordingDurationMinutes minutes');
+            await _stopRecordingAndShowUI();
+          }
+        },
+      );
+    } else {
+      // Failed to start - show UI again
+      setState(() {
+        _hideEverything = false;
+        _recordingStatusMessage = '';
+      });
+      if (mounted) {
+        ToastUtils.showError(context, 'Failed to start recording');
+      }
+    }
+  }
+
+  /// Stop recording and show UI again
+  Future<void> _stopRecordingAndShowUI() async {
+    if (!_isScreenRecording) return;
+
+    setState(() {
+      _recordingStatusMessage = 'Saving...';
+    });
+
+    // Stop recording
+    String? path = await _screenRecordingService.stopRecording();
+
+    // Cancel auto-stop timer
+    _recordingAutoStopTimer?.cancel();
+    _recordingAutoStopTimer = null;
+
+    setState(() {
+      _isScreenRecording = false;
+      _recordingStartTime = null;
+      _hideEverything = false; // Show UI again
+    });
+
+    if (path != null && mounted) {
+      setState(() {
+        _savedRecordingPath = path;
+        _recordingStatusMessage = 'Saved! Tap to view';
+      });
+
+      // Auto-hide status after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _recordingStatusMessage == 'Saved! Tap to view') {
+          setState(() {
+            _recordingStatusMessage = '';
+            _savedRecordingPath = null;
+          });
+        }
+      });
+    } else {
+      setState(() {
+        _recordingStatusMessage = '';
+      });
+      if (mounted) {
+        ToastUtils.showError(context, 'Failed to save recording');
+      }
+    }
+  }
+
+  /// Build recording status widget for top center
+  Widget _buildRecordingStatus() {
+    if (_recordingStatusMessage.isEmpty &&
+        !_pendingScreenRecording &&
+        !_isScreenRecording) {
+      return const SizedBox.shrink();
+    }
+
+    Color dotColor;
+    if (_pendingScreenRecording) {
+      dotColor = Colors.orange;
+    } else if (_isScreenRecording) {
+      dotColor = Colors.red;
+    } else {
+      dotColor = Colors.green;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (_savedRecordingPath != null) {
+          RecordingPreviewOverlay.show(context, _savedRecordingPath!);
+          setState(() {
+            _recordingStatusMessage = '';
+            _savedRecordingPath = null;
+          });
+        } else if (_isScreenRecording || _pendingScreenRecording) {
+          // Cancel recording
+          if (_isScreenRecording) {
+            _stopRecordingAndShowUI();
+          } else {
+            setState(() {
+              _pendingScreenRecording = false;
+              _recordingStatusMessage = '';
+            });
+            ToastUtils.showInfo(context, 'Recording cancelled');
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _recordingStatusMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
