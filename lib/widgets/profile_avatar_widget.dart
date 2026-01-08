@@ -287,21 +287,6 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
                         ),
                       ),
                     ),
-                    // Recording indicator dot below profile
-                    if (widget.isPendingRecording || widget.isRecording)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: widget.isPendingRecording
-                            ? _BlinkingRecordDot()
-                            : Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                      ),
                   ],
                 ),
               ),
@@ -392,52 +377,3 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
 }
 
 /// Blinking red dot for pending recording state
-class _BlinkingRecordDot extends StatefulWidget {
-  @override
-  State<_BlinkingRecordDot> createState() => _BlinkingRecordDotState();
-}
-
-class _BlinkingRecordDotState extends State<_BlinkingRecordDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _animation.value,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}

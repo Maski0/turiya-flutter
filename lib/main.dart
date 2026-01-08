@@ -2009,34 +2009,30 @@ class _MainScreenState extends State<_MainScreen>
               ),
             ),
             child: Center(
-              // Record icon like web: red filled circle with outer ring
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.red,
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: _isScreenRecording || _pendingScreenRecording
-                          ? BoxShape.rectangle
-                          : BoxShape.circle,
-                      borderRadius:
-                          _isScreenRecording || _pendingScreenRecording
-                              ? BorderRadius.circular(2)
-                              : null,
+              // Record icon: red filled circle with outer ring, blinks when recording
+              child: _isScreenRecording || _pendingScreenRecording
+                  ? _BlinkingRecordIcon()
+                  : Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.red,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
         ),
@@ -2717,6 +2713,70 @@ class Route3 extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Blinking record icon for active/pending recording
+class _BlinkingRecordIcon extends StatefulWidget {
+  @override
+  State<_BlinkingRecordIcon> createState() => _BlinkingRecordIconState();
+}
+
+class _BlinkingRecordIconState extends State<_BlinkingRecordIcon>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _animation.value,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.red,
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
