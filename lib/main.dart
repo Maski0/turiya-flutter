@@ -2276,6 +2276,7 @@ class _MainScreenState extends State<_MainScreen>
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.transparent,
+      useSafeArea: false,
       builder: (BuildContext dialogContext) {
         return GestureDetector(
           onTap: () => Navigator.of(dialogContext).pop(false),
@@ -2323,7 +2324,7 @@ class _MainScreenState extends State<_MainScreen>
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Header with title, red dot, and close button
+                              // Header with title and close button
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
@@ -2339,24 +2340,6 @@ class _MainScreenState extends State<_MainScreen>
                                             color: Colors.white,
                                             fontWeight: FontWeight.w500,
                                           ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Red dot
-                                  Container(
-                                    width: 12,
-                                    height: 12,
-                                    margin: const EdgeInsets.only(top: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.red.withOpacity(0.4),
-                                          blurRadius: 8,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
                                     ),
                                   ),
                                   const SizedBox(width: 12),
