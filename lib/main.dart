@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1158,13 +1157,56 @@ class _MainScreenState extends State<_MainScreen>
   }
 
   Future<void> _startListening() async {
-    // Request microphone permission
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
+    // Check microphone permission
+    var status = await Permission.microphone.status;
+    if (status.isPermanentlyDenied || status.isDenied) {
       if (mounted) {
-        ToastUtils.showError(context, 'Microphone permission required');
+        final shouldOpenSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.white.withOpacity(0.1)),
+            ),
+            title: const Text('Microphone Permission',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            content: const Text(
+              'Microphone access is needed for voice input.\n\n'
+              'Please enable it in Settings > Turiya > Microphone.',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open Settings',
+                    style: TextStyle(color: Color(0xFF22C55E))),
+              ),
+            ],
+          ),
+        );
+        if (shouldOpenSettings == true) {
+          await openAppSettings();
+        }
       }
       return;
+    }
+    
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ToastUtils.showError(context, 'Microphone permission required');
+        }
+        return;
+      }
     }
 
     bool available = await _speechToText.initialize(
@@ -1378,8 +1420,58 @@ class _MainScreenState extends State<_MainScreen>
         }
       }
     } else {
-      // Start recording with internal audio only (no microphone needed!)
-      // _screenRecordingService.setAudioCaptureMode(internalOnly: true);
+      // Request microphone permission first for audio recording
+      final micStatus = await Permission.microphone.status;
+      if (micStatus.isPermanentlyDenied || micStatus.isDenied) {
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+              ),
+              title: const Text('Microphone Permission',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              content: const Text(
+                'Microphone access is needed for recording audio.\n\n'
+                'Please enable it in Settings > Turiya > Microphone.',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Color(0xFF22C55E))),
+                ),
+              ],
+            ),
+          );
+          if (shouldOpenSettings == true) {
+            await openAppSettings();
+          }
+        }
+        return;
+      }
+      if (!micStatus.isGranted) {
+        final result = await Permission.microphone.request();
+        if (!result.isGranted) {
+          if (mounted) {
+            ToastUtils.showError(context, 'Microphone permission required for audio');
+          }
+          // Continue anyway - recording will work without audio
+        }
+      }
+
+      // Start recording
       bool started = await _screenRecordingService.startRecording();
 
       if (started) {
