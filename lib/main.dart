@@ -2210,88 +2210,7 @@ class _MainScreenState extends State<_MainScreen>
     });
   }
 
-  /// Request all permissions for recording (called from popup)
-  Future<bool> _requestRecordingPermissions(BuildContext dialogContext) async {
-    List<String> deniedPermissions = [];
-
-    // 1. Request microphone permission for audio recording
-    var micStatus = await Permission.microphone.status;
-    if (!micStatus.isGranted) {
-      micStatus = await Permission.microphone.request();
-    }
-    if (!micStatus.isGranted) {
-      if (micStatus.isPermanentlyDenied) {
-        deniedPermissions.add('Microphone');
-      }
-    }
-
-    // 2. Request photos permission for saving recordings
-    var photosStatus = await Permission.photos.status;
-    if (!photosStatus.isGranted) {
-      photosStatus = await Permission.photos.request();
-    }
-    if (!photosStatus.isGranted) {
-      if (photosStatus.isPermanentlyDenied) {
-        deniedPermissions.add('Photos');
-      }
-    }
-
-    // If any permissions are permanently denied, show settings dialog
-    if (deniedPermissions.isNotEmpty) {
-      // Close the recording popup first
-      Navigator.of(dialogContext).pop(false);
-
-      if (mounted) {
-        final permissionsList = deniedPermissions.join(', ');
-        final shouldOpenSettings = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.white.withOpacity(0.1)),
-            ),
-            title: const Text('Permissions Required',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            content: Text(
-              'The following permissions are needed for recording:\n\n'
-              '• $permissionsList\n\n'
-              'Please enable them in Settings.',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child:
-                    Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Open Settings',
-                    style: TextStyle(color: Color(0xFF22C55E))),
-              ),
-            ],
-          ),
-        );
-        if (shouldOpenSettings == true) {
-          await openAppSettings();
-        }
-      }
-      return false;
-    }
-
-    // Check if mic was denied (but not permanently) - recording can proceed without audio
-    if (!micStatus.isGranted && mounted) {
-      ToastUtils.showInfo(context, 'Recording will proceed without audio');
-    }
-
-    return true;
-  }
-
-  /// Shows the recording confirmation popup (same style as login modal)
+  /// Shows the recording confirmation popup with permission checklist
   Future<bool?> _showRecordingConfirmationPopup() async {
     return showDialog<bool>(
       context: context,
@@ -2299,213 +2218,9 @@ class _MainScreenState extends State<_MainScreen>
       barrierColor: Colors.transparent,
       useSafeArea: false,
       builder: (BuildContext dialogContext) {
-        return GestureDetector(
-          onTap: () => Navigator.of(dialogContext).pop(false),
-          child: Stack(
-            children: [
-              // Blurred background overlay - same as login modal
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                  child: Container(
-                    // Very subtle white like login modal
-                    color: const Color(0x03FFFFFF),
-                  ),
-                ),
-              ),
-              Center(
-                child: GestureDetector(
-                  onTap: () {}, // Prevent closing when tapping modal content
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            // Same as login modal
-                            color: const Color(0x14FFFFFF),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0x14FFFFFF),
-                              width: 1,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x14111111),
-                                blurRadius: 16,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Header with title and close button
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Record next conversation?',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge!
-                                          .copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Close button
-                                  GestureDetector(
-                                    onTap: () =>
-                                        Navigator.of(dialogContext).pop(false),
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0x14FFFFFF),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: const Color(0x14FFFFFF),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(
-                                          Icons.close,
-                                          color: Colors.white,
-                                          size: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              // Description
-                              Text(
-                                'Your next conversation with Kṛṣṇa will be recorded and shared. This will include screen and audio.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyLarge!
-                                    .copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                              ),
-                              const SizedBox(height: 12),
-                              // Permission note
-                              Text(
-                                'You will be asked to allow microphone, screen capture, and photo library access.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium!
-                                    .copyWith(
-                                      color: Colors.white.withOpacity(0.6),
-                                      fontWeight: FontWeight.w400,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                              ),
-                              const SizedBox(height: 24),
-                              // Button container with glass effect (same as login modal)
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x0DFFFFFF),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0x14FFFFFF),
-                                    width: 1,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x14111111),
-                                      blurRadius: 30,
-                                      offset: Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    // Record button (white like login button)
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: BackdropFilter(
-                                        filter: ImageFilter.blur(
-                                            sigmaX: 16, sigmaY: 16),
-                                        child: Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            onTap: () async {
-                                              // Request permissions first
-                                              final granted =
-                                                  await _requestRecordingPermissions(
-                                                      dialogContext);
-                                              if (granted && mounted) {
-                                                Navigator.of(dialogContext)
-                                                    .pop(true);
-                                              }
-                                            },
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: Container(
-                                              width: double.infinity,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 24,
-                                                vertical: 12,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color:
-                                                      const Color(0x33CCCCCC),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Center(
-                                                child: Text(
-                                                  'Record',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleLarge!
-                                                      .copyWith(
-                                                        color: Colors.black,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        height: 1.75,
-                                                      ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        return _RecordingPermissionDialog(
+          onRecord: () => Navigator.of(dialogContext).pop(true),
+          onClose: () => Navigator.of(dialogContext).pop(false),
         );
       },
     );
@@ -2877,6 +2592,369 @@ class _BlinkingDotState extends State<_BlinkingDot>
           ),
         );
       },
+    );
+  }
+}
+
+/// Recording permission dialog with checklist
+class _RecordingPermissionDialog extends StatefulWidget {
+  final VoidCallback onRecord;
+  final VoidCallback onClose;
+
+  const _RecordingPermissionDialog({
+    required this.onRecord,
+    required this.onClose,
+  });
+
+  @override
+  State<_RecordingPermissionDialog> createState() =>
+      _RecordingPermissionDialogState();
+}
+
+class _RecordingPermissionDialogState extends State<_RecordingPermissionDialog> {
+  bool _micGranted = false;
+  bool _photosGranted = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    final micStatus = await Permission.microphone.status;
+    final photosStatus = await Permission.photos.status;
+
+    if (mounted) {
+      setState(() {
+        _micGranted = micStatus.isGranted;
+        _photosGranted = photosStatus.isGranted;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _requestPermission(Permission permission) async {
+    final status = await permission.request();
+    await _checkPermissions();
+
+    // If permanently denied, offer to open settings
+    if (status.isPermanentlyDenied && mounted) {
+      final shouldOpen = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          ),
+          title: const Text('Permission Required',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
+          content: const Text(
+            'This permission was denied. Please enable it in Settings.',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Open Settings',
+                  style: TextStyle(color: Color(0xFF22C55E))),
+            ),
+          ],
+        ),
+      );
+      if (shouldOpen == true) {
+        await openAppSettings();
+        // Re-check after returning from settings
+        await _checkPermissions();
+      }
+    }
+  }
+
+  bool get _allPermissionsGranted => _micGranted && _photosGranted;
+
+  Widget _buildPermissionItem({
+    required String title,
+    required String description,
+    required bool isGranted,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: isGranted ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isGranted
+              ? const Color(0x1022C55E)
+              : const Color(0x10FFFFFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isGranted
+                ? const Color(0x3022C55E)
+                : const Color(0x20FFFFFF),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Checkbox
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isGranted ? const Color(0xFF22C55E) : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isGranted
+                      ? const Color(0xFF22C55E)
+                      : Colors.white.withOpacity(0.3),
+                  width: 2,
+                ),
+              ),
+              child: isGranted
+                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Tap indicator if not granted
+            if (!isGranted)
+              Icon(
+                Icons.touch_app,
+                color: Colors.white.withOpacity(0.4),
+                size: 20,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onClose,
+      child: Stack(
+        children: [
+          // Blurred background
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(color: const Color(0x03FFFFFF)),
+            ),
+          ),
+          Center(
+            child: GestureDetector(
+              onTap: () {}, // Prevent closing
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0x14FFFFFF),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0x14FFFFFF),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Record next conversation?',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge!
+                                      .copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: widget.onClose,
+                                child: Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x14FFFFFF),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Your conversation will be recorded. Please allow the following permissions:',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium!
+                                .copyWith(color: Colors.white.withOpacity(0.8)),
+                          ),
+                          const SizedBox(height: 16),
+                          // Permission checklist
+                          if (_isLoading)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(20),
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          else ...[
+                            _buildPermissionItem(
+                              title: 'Microphone',
+                              description: 'To record audio from conversation',
+                              isGranted: _micGranted,
+                              onTap: () =>
+                                  _requestPermission(Permission.microphone),
+                            ),
+                            const SizedBox(height: 10),
+                            _buildPermissionItem(
+                              title: 'Photo Library',
+                              description: 'To save recording to your device',
+                              isGranted: _photosGranted,
+                              onTap: () =>
+                                  _requestPermission(Permission.photos),
+                            ),
+                            const SizedBox(height: 10),
+                            // Screen recording note (handled by iOS)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0x10FFFFFF),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0x20FFFFFF),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      color: Colors.white.withOpacity(0.6),
+                                      size: 20),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Screen capture permission will be requested when recording starts.',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 13,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          // Record button
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0x0DFFFFFF),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0x14FFFFFF),
+                                width: 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _allPermissionsGranted
+                                      ? widget.onRecord
+                                      : null,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: _allPermissionsGranted
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'Record',
+                                        style: TextStyle(
+                                          color: _allPermissionsGranted
+                                              ? Colors.black
+                                              : Colors.black.withOpacity(0.4),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
