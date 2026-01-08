@@ -54,7 +54,7 @@ class ScreenRecordingService {
   }
 
   /// Start native screen recording
-  /// Note: Permissions should be requested BEFORE calling this method
+  /// Note: Recording WITHOUT audio to avoid iOS audio session conflicts (earpiece issue)
   Future<bool> startRecording() async {
     if (_isRecording) {
       debugPrint('⚠️ Already recording');
@@ -62,40 +62,19 @@ class ScreenRecordingService {
     }
 
     try {
-      debugPrint('🎬 Starting native screen recording...');
+      debugPrint('🎬 Starting native screen recording (video only)...');
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final videoName = 'turiya_recording_$timestamp';
 
-      // Check if microphone permission is already granted (don't request here)
-      final micStatus = await Permission.microphone.status;
-      final hasAudioPermission = micStatus.isGranted;
-      debugPrint(
-          '🎤 Microphone permission status: $micStatus (granted: $hasAudioPermission)');
+      // Record WITHOUT audio to avoid audio session conflicts
+      // This prevents the earpiece issue caused by ReplayKit audio recording
+      final started = await FlutterScreenRecording.startRecordScreen(videoName);
+      debugPrint('🎬 startRecordScreen returned: $started');
 
-      // Try with audio if we have permission
-      if (hasAudioPermission) {
-        debugPrint('🎬 Starting recording with audio...');
-        final started =
-            await FlutterScreenRecording.startRecordScreenAndAudio(videoName);
-        debugPrint('🎬 startRecordScreenAndAudio returned: $started');
-
-        if (started) {
-          _isRecording = true;
-          debugPrint('✅ Native screen recording started (with audio)');
-          return true;
-        }
-      }
-
-      // Fallback: record without audio
-      debugPrint('🎬 Starting recording without audio...');
-      final startedNoAudio =
-          await FlutterScreenRecording.startRecordScreen(videoName);
-      debugPrint('🎬 startRecordScreen returned: $startedNoAudio');
-
-      if (startedNoAudio) {
+      if (started) {
         _isRecording = true;
-        debugPrint('✅ Native screen recording started (without audio)');
+        debugPrint('✅ Native screen recording started (video only)');
         return true;
       }
 

@@ -2300,23 +2300,7 @@ class _MainScreenState extends State<_MainScreen>
         _recordingStartTime = DateTime.now();
       });
 
-      // Force speaker using native method channel (more reliable than Hardware.setSpeakerphoneOn)
-      if (Platform.isIOS) {
-        try {
-          await Future.delayed(const Duration(milliseconds: 100));
-          await _audioChannel.invokeMethod('forceSpeaker');
-          debugPrint('🔊 Native: Forced audio output to speaker');
-        } catch (e) {
-          debugPrint('⚠️ Error forcing speaker via native: $e');
-        }
-      } else if (Platform.isAndroid) {
-        try {
-          await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Android: Forced audio output to speaker');
-        } catch (e) {
-          debugPrint('⚠️ Error forcing speaker output: $e');
-        }
-      }
+      // Note: Recording is video-only to avoid audio session conflicts (earpiece issue)
 
       // Start auto-stop timer (max recording duration)
       _recordingAutoStopTimer = Timer(
