@@ -1277,18 +1277,20 @@ class _MainScreenState extends State<_MainScreen>
                                       // Spacer to push profile to the right
                                       const Spacer(),
 
-                                      // Right side - Record button + Profile (row layout)
+                                      // Right side - Profile on top, Record button below (right-aligned column)
                                       BlocBuilder<AuthBloc, AuthState>(
                                         builder: (context, state) {
                                           if (state is AuthAuthenticated &&
                                               !_isScreenRecording) {
-                                            return Row(
+                                            return Column(
                                               mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.end,
                                               children: [
-                                                _buildRecordButton(),
-                                                const SizedBox(width: 12),
                                                 _buildCreditsAndProfile(
                                                     context),
+                                                const SizedBox(height: 12),
+                                                _buildRecordButton(),
                                               ],
                                             );
                                           }
