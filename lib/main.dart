@@ -38,6 +38,7 @@ import 'blocs/credits/credits_bloc.dart';
 import 'blocs/memory/memory_bloc.dart';
 import 'services/background_audio_service.dart';
 import 'services/livekit_service.dart';
+import 'package:livekit_client/livekit_client.dart' show Hardware;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'utils/toast_utils.dart';
@@ -2248,6 +2249,16 @@ class _MainScreenState extends State<_MainScreen>
         _recordingStartTime = DateTime.now();
       });
 
+      // Force audio back to speaker (recording with mic changes audio session)
+      if (Platform.isIOS || Platform.isAndroid) {
+        try {
+          await Hardware.instance.setSpeakerphoneOn(true);
+          debugPrint('🔊 Forced audio output to speaker after recording started');
+        } catch (e) {
+          debugPrint('⚠️ Error forcing speaker output: $e');
+        }
+      }
+
       // Start auto-stop timer (max recording duration)
       _recordingAutoStopTimer = Timer(
         Duration(minutes: _maxRecordingDurationMinutes),
@@ -2300,7 +2311,7 @@ class _MainScreenState extends State<_MainScreen>
 
       // Automatically show the recording preview
       RecordingPreviewOverlay.show(context, path);
-      
+
       // Clear the saved path after showing preview
       setState(() {
         _savedRecordingPath = null;
