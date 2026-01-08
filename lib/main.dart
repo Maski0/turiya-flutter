@@ -2199,10 +2199,19 @@ class _MainScreenState extends State<_MainScreen>
       return;
     }
 
-    // Show confirmation popup like web version
+    // Show confirmation popup - permissions are requested inside when Record is clicked
     final shouldRecord = await _showRecordingConfirmationPopup();
     if (shouldRecord != true) return;
 
+    // Set pending state - will start recording when Krishna speaks
+    setState(() {
+      _pendingScreenRecording = true;
+      _recordingStatusMessage = 'Awaiting response';
+    });
+  }
+
+  /// Request permissions for recording (called from popup)
+  Future<bool> _requestRecordingPermissions(BuildContext dialogContext) async {
     // Request microphone permission for audio recording
     var micStatus = await Permission.microphone.status;
 
@@ -2214,10 +2223,13 @@ class _MainScreenState extends State<_MainScreen>
     // If still not granted after request, show settings dialog only if permanently denied
     if (!micStatus.isGranted) {
       if (micStatus.isPermanentlyDenied) {
+        // Close the recording popup first
+        Navigator.of(dialogContext).pop(false);
+
         if (mounted) {
           final shouldOpenSettings = await showDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (ctx) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -2235,12 +2247,12 @@ class _MainScreenState extends State<_MainScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: () => Navigator.pop(ctx, false),
                   child:
                       Text('Cancel', style: TextStyle(color: Colors.grey[400])),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.pop(context, true),
+                  onPressed: () => Navigator.pop(ctx, true),
                   child: const Text('Open Settings',
                       style: TextStyle(color: Color(0xFF22C55E))),
                 ),
@@ -2251,7 +2263,7 @@ class _MainScreenState extends State<_MainScreen>
             await openAppSettings();
           }
         }
-        return;
+        return false;
       }
       // User denied but not permanently - continue without audio
       if (mounted) {
@@ -2259,11 +2271,7 @@ class _MainScreenState extends State<_MainScreen>
       }
     }
 
-    // Set pending state - will start recording when Krishna speaks
-    setState(() {
-      _pendingScreenRecording = true;
-      _recordingStatusMessage = 'Awaiting response';
-    });
+    return true;
   }
 
   /// Shows the recording confirmation popup (same style as login modal)
@@ -2377,6 +2385,19 @@ class _MainScreenState extends State<_MainScreen>
                                       fontWeight: FontWeight.w400,
                                     ),
                               ),
+                              const SizedBox(height: 12),
+                              // Permission note
+                              Text(
+                                'You will be asked to allow microphone access for audio recording.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium!
+                                    .copyWith(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontWeight: FontWeight.w400,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                              ),
                               const SizedBox(height: 24),
                               // Button container with glass effect (same as login modal)
                               Container(
@@ -2407,9 +2428,16 @@ class _MainScreenState extends State<_MainScreen>
                                         child: Material(
                                           color: Colors.transparent,
                                           child: InkWell(
-                                            onTap: () =>
+                                            onTap: () async {
+                                              // Request permissions first
+                                              final granted =
+                                                  await _requestRecordingPermissions(
+                                                      dialogContext);
+                                              if (granted && mounted) {
                                                 Navigator.of(dialogContext)
-                                                    .pop(true),
+                                                    .pop(true);
+                                              }
+                                            },
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                             child: Container(
