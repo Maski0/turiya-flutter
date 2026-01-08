@@ -141,19 +141,6 @@ class _ProfileAvatarWidgetState extends State<ProfileAvatarWidget>
                 _buildDivider(),
               ],
 
-              // Record
-              if (widget.onRecordTap != null) ...[
-                _buildDropdownItem(
-                  icon: Icons.fiber_manual_record_outlined,
-                  title: 'Record',
-                  onTap: () {
-                    _removeDropdown();
-                    widget.onRecordTap?.call();
-                  },
-                ),
-                _buildDivider(),
-              ],
-
               // Settings
               _buildDropdownItem(
                 icon: Icons.settings_outlined,

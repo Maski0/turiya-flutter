@@ -1275,13 +1275,20 @@ class _MainScreenState extends State<_MainScreen>
                                       // Spacer to push profile to the right
                                       const Spacer(),
 
-                                      // Right side - Profile (always when authenticated)
+                                      // Right side - Profile + Record button (like web mobile: flex-col-reverse)
                                       BlocBuilder<AuthBloc, AuthState>(
                                         builder: (context, state) {
                                           if (state is AuthAuthenticated &&
                                               !_isScreenRecording) {
-                                            return _buildCreditsAndProfile(
-                                                context);
+                                            return Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _buildCreditsAndProfile(
+                                                    context),
+                                                const SizedBox(height: 12),
+                                                _buildRecordButton(),
+                                              ],
+                                            );
                                           }
                                           if (_isScreenRecording) {
                                             return const SizedBox.shrink();
@@ -1978,6 +1985,61 @@ class _MainScreenState extends State<_MainScreen>
     );
   }
 
+  /// Builds the separate record button (like web mobile view)
+  Widget _buildRecordButton() {
+    return GestureDetector(
+      onTap: _toggleScreenRecording,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0x1AFFFFFF),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0x14FFFFFF),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: _isScreenRecording || _pendingScreenRecording
+                  ? Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    )
+                  : Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.red,
+                          width: 2,
+                        ),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showLanguageSelectionDialog() {
     showDialog(
       context: context,
@@ -2218,7 +2280,8 @@ class _MainScreenState extends State<_MainScreen>
               color: Colors.black.withOpacity(0.1),
               child: Center(
                 child: GestureDetector(
-                  onTap: () {}, // Prevent closing when tapping the modal content
+                  onTap:
+                      () {}, // Prevent closing when tapping the modal content
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Container(
