@@ -53,8 +53,7 @@ class ScreenRecordingService {
     return recordingsDir;
   }
 
-  /// Start native screen recording
-  /// Note: Recording WITHOUT audio to avoid iOS audio session conflicts (earpiece issue)
+  /// Start native screen recording with audio
   Future<bool> startRecording() async {
     if (_isRecording) {
       debugPrint('⚠️ Already recording');
@@ -62,19 +61,27 @@ class ScreenRecordingService {
     }
 
     try {
-      debugPrint('🎬 Starting native screen recording (video only)...');
+      debugPrint('🎬 Starting native screen recording with audio...');
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final videoName = 'turiya_recording_$timestamp';
 
-      // Record WITHOUT audio to avoid audio session conflicts
-      // This prevents the earpiece issue caused by ReplayKit audio recording
-      final started = await FlutterScreenRecording.startRecordScreen(videoName);
-      debugPrint('🎬 startRecordScreen returned: $started');
+      // Record WITH audio - we'll handle speaker routing in main.dart
+      final started = await FlutterScreenRecording.startRecordScreenAndAudio(videoName);
+      debugPrint('🎬 startRecordScreenAndAudio returned: $started');
 
       if (started) {
         _isRecording = true;
-        debugPrint('✅ Native screen recording started (video only)');
+        debugPrint('✅ Native screen recording started (with audio)');
+        return true;
+      }
+
+      // Fallback to video-only if audio recording fails
+      debugPrint('🎬 Audio recording failed, trying video only...');
+      final startedNoAudio = await FlutterScreenRecording.startRecordScreen(videoName);
+      if (startedNoAudio) {
+        _isRecording = true;
+        debugPrint('✅ Native screen recording started (video only fallback)');
         return true;
       }
 

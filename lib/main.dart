@@ -2300,7 +2300,35 @@ class _MainScreenState extends State<_MainScreen>
         _recordingStartTime = DateTime.now();
       });
 
-      // Note: Recording is video-only to avoid audio session conflicts (earpiece issue)
+      // Aggressively force speaker output after recording starts
+      // ReplayKit changes audio session, so we need to override it multiple times
+      if (Platform.isIOS) {
+        // Force speaker immediately
+        try {
+          await _audioChannel.invokeMethod('forceSpeaker');
+          debugPrint('🔊 Forced speaker (1st attempt)');
+        } catch (e) {
+          debugPrint('⚠️ Error forcing speaker: $e');
+        }
+        
+        // Force again after a short delay
+        await Future.delayed(const Duration(milliseconds: 200));
+        try {
+          await _audioChannel.invokeMethod('forceSpeaker');
+          debugPrint('🔊 Forced speaker (2nd attempt)');
+        } catch (e) {
+          debugPrint('⚠️ Error forcing speaker: $e');
+        }
+        
+        // And again before audio starts
+        await Future.delayed(const Duration(milliseconds: 300));
+        try {
+          await _audioChannel.invokeMethod('forceSpeaker');
+          debugPrint('🔊 Forced speaker (3rd attempt)');
+        } catch (e) {
+          debugPrint('⚠️ Error forcing speaker: $e');
+        }
+      }
 
       // Start auto-stop timer (max recording duration)
       _recordingAutoStopTimer = Timer(

@@ -56,20 +56,23 @@ import AVFoundation
     do {
       let audioSession = AVAudioSession.sharedInstance()
       
-      // Force playAndRecord category which allows speaker override
+      // Deactivate first to reset
+      try? audioSession.setActive(false)
+      
+      // Use playAndRecord with speaker options
       try audioSession.setCategory(
         .playAndRecord,
-        mode: .default,
-        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+        mode: .voiceChat,
+        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
       )
       
-      // Override output to speaker
+      // Force override to speaker
       try audioSession.overrideOutputAudioPort(.speaker)
       
-      // Activate
-      try audioSession.setActive(true)
+      // Activate with options
+      try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
       
-      print("✅ Forced speaker output")
+      print("✅ Forced speaker output (mode: voiceChat)")
     } catch {
       print("❌ Error forcing speaker: \(error)")
     }
