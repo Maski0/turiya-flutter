@@ -949,8 +949,10 @@ class _MainScreenState extends State<_MainScreen>
                     print(
                         '📊 Audio duration: ${audioDuration.toStringAsFixed(2)}s');
 
-                    // Store expected recording duration (audio + 1s buffer at end)
-                    _expectedRecordingDurationSeconds = audioDuration + 1.0;
+                    // Store expected recording duration (audio + 3s buffer at end for iOS recording)
+                    _expectedRecordingDurationSeconds = audioDuration + 3.0;
+                    debugPrint(
+                        '🎬 Set expected recording duration: $_expectedRecordingDurationSeconds seconds');
 
                     if (_currentAlignment == null ||
                         _currentAlignment!.characterEndTimesSeconds.isEmpty) {
@@ -1016,7 +1018,8 @@ class _MainScreenState extends State<_MainScreen>
 
                       // Auto-stop recording when Krishna finishes speaking
                       if (_isScreenRecording) {
-                        _stopRecordingAndShowUI();
+                        debugPrint('🎬 Audio complete - stopping recording');
+                        await _stopRecordingAndShowUI();
                       }
 
                       // Fade out user message bubble
@@ -2261,6 +2264,9 @@ class _MainScreenState extends State<_MainScreen>
 
     debugPrint('🎬 _startPendingRecording called - starting UI fade');
 
+    // Dismiss keyboard first
+    FocusManager.instance.primaryFocus?.unfocus();
+
     setState(() {
       _pendingScreenRecording = false;
       _hideEverything = true; // Hide UI - triggers AnimatedOpacity
@@ -2282,7 +2288,9 @@ class _MainScreenState extends State<_MainScreen>
     }
 
     // Start actual recording
+    debugPrint('🎬 Calling startRecording() at ${DateTime.now()}');
     bool started = await _screenRecordingService.startRecording();
+    debugPrint('🎬 startRecording() returned $started at ${DateTime.now()}');
 
     if (started) {
       setState(() {
@@ -2329,7 +2337,16 @@ class _MainScreenState extends State<_MainScreen>
 
   /// Stop recording and show UI again
   Future<void> _stopRecordingAndShowUI() async {
-    if (!_isScreenRecording) return;
+    debugPrint('🛑 _stopRecordingAndShowUI called at ${DateTime.now()}');
+    debugPrint('🛑 _isScreenRecording: $_isScreenRecording');
+    debugPrint('🛑 _recordingStartTime: $_recordingStartTime');
+    debugPrint(
+        '🛑 _expectedRecordingDurationSeconds: $_expectedRecordingDurationSeconds');
+
+    if (!_isScreenRecording) {
+      debugPrint('🛑 Not recording, returning early');
+      return;
+    }
 
     // Wait for expected recording duration if we have it (audio duration + buffer)
     if (_expectedRecordingDurationSeconds != null &&
@@ -2337,11 +2354,16 @@ class _MainScreenState extends State<_MainScreen>
       final expectedDuration = Duration(
           milliseconds: (_expectedRecordingDurationSeconds! * 1000).toInt());
       final elapsed = DateTime.now().difference(_recordingStartTime!);
+      debugPrint(
+          '🛑 Elapsed since recording start: ${elapsed.inMilliseconds}ms');
+      debugPrint('🛑 Expected duration: ${expectedDuration.inMilliseconds}ms');
       if (elapsed < expectedDuration) {
         final remaining = expectedDuration - elapsed;
         debugPrint(
             '⏳ Waiting ${remaining.inMilliseconds}ms for expected recording duration (audio: ${_expectedRecordingDurationSeconds}s)');
         await Future.delayed(remaining);
+      } else {
+        debugPrint('🛑 Already past expected duration, not waiting');
       }
     } else {
       // Fallback: ensure minimum recording duration of 5 seconds
@@ -2354,6 +2376,9 @@ class _MainScreenState extends State<_MainScreen>
               '⏳ Waiting ${remaining.inMilliseconds}ms for minimum recording duration');
           await Future.delayed(remaining);
         }
+      } else {
+        debugPrint('🛑 No recording start time, using fallback 5s wait');
+        await Future.delayed(const Duration(seconds: 5));
       }
     }
 
@@ -2365,7 +2390,9 @@ class _MainScreenState extends State<_MainScreen>
     });
 
     // Stop recording
+    debugPrint('🛑 Calling stopRecording() at ${DateTime.now()}');
     String? path = await _screenRecordingService.stopRecording();
+    debugPrint('🛑 stopRecording() returned: $path at ${DateTime.now()}');
 
     // Cancel auto-stop timer
     _recordingAutoStopTimer?.cancel();
