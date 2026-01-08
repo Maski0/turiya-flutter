@@ -2625,19 +2625,27 @@ class _RecordingPermissionDialogState
 
   Future<void> _checkPermissions() async {
     final micStatus = await Permission.microphone.status;
-    final photosStatus = await Permission.photos.status;
+    // Use photosAddOnly for saving recordings (iOS)
+    final photosStatus = await Permission.photosAddOnly.status;
+
+    debugPrint('🎤 Mic status: $micStatus');
+    debugPrint('📷 Photos status: $photosStatus');
 
     if (mounted) {
       setState(() {
         _micGranted = micStatus.isGranted;
-        _photosGranted = photosStatus.isGranted;
+        // Accept both granted and limited as "granted" for photos
+        _photosGranted =
+            photosStatus.isGranted || photosStatus.isLimited;
         _isLoading = false;
       });
     }
   }
 
   Future<void> _requestPermission(Permission permission) async {
+    debugPrint('📝 Requesting permission: $permission');
     final status = await permission.request();
+    debugPrint('📝 Permission result: $status');
     await _checkPermissions();
 
     // If permanently denied, offer to open settings
@@ -2859,7 +2867,7 @@ class _RecordingPermissionDialogState
                               description: 'To save recording to your device',
                               isGranted: _photosGranted,
                               onTap: () =>
-                                  _requestPermission(Permission.photos),
+                                  _requestPermission(Permission.photosAddOnly),
                             ),
                           ],
                           const SizedBox(height: 20),
