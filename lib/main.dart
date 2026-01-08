@@ -1139,506 +1139,529 @@ class _MainScreenState extends State<_MainScreen>
         child: Scaffold(
           backgroundColor: Colors.black,
           resizeToAvoidBottomInset: false,
-          body: _hideEverything
-              ? // Show only Unity when hiding everything - tap anywhere to show UI
-              GestureDetector(
-                  onTap: () => setState(() => _hideEverything = false),
-                  child: const EmbedUnity(),
-                )
-              : GestureDetector(
-                  onVerticalDragStart: (_) {
+          body: GestureDetector(
+            onTap: _hideEverything
+                ? () => setState(() => _hideEverything = false)
+                : null,
+            onVerticalDragStart: _hideEverything
+                ? null
+                : (_) {
                     // Dismiss keyboard on vertical drag (swipe)
                     FocusScope.of(context).unfocus();
                   },
-                  child: Stack(
-                    children: [
-                      // Layer 1: Unity
-                      Positioned.fill(
-                        child: RepaintBoundary(
-                          key: _repaintBoundaryKey,
-                          child: const EmbedUnity(),
-                        ),
-                      ),
+            child: Stack(
+              children: [
+                // Layer 1: Unity (always visible)
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    key: _repaintBoundaryKey,
+                    child: const EmbedUnity(),
+                  ),
+                ),
 
-                      // Layer 2: UI elements
-                      // Chat Sidebar
-                      if (_showChatSidebar)
-                        Positioned.fill(
-                          child: FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-                              child: ChatSidebar(
-                                scrollController: _scrollController,
-                                onClose: () {
-                                  _chipAutoHideTimer?.cancel();
-                                  _animationController.reverse().then((_) {
-                                    setState(() => _showChatSidebar = false);
-                                  });
-                                },
-                                onFollowUpTap: (question) {
-                                  _textController.text = question;
-                                  _sendMessage(question, context);
-                                },
-                                onLoginTap: _toggleLoginModal,
-                                messageController: _textController,
-                                onSendMessage: () {
-                                  final text = _textController.text.trim();
-                                  if (text.isNotEmpty) {
-                                    _sendMessage(text, context);
-                                  }
-                                },
-                                isRecording: _isRecording,
-                                isAudioPlaying: _isAudioPlaying,
-                                onMicTap: _toggleListening,
-                                onStopAudio: _stopAudio,
-                                // Adjust bottom padding for keyboard
-                                bottomPadding: keyboardHeight + 90,
+                // Layer 2: UI elements with animated fade
+                // Wrap in AnimatedOpacity for smooth fade transition
+                AnimatedOpacity(
+                  opacity: _hideEverything ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeInOut,
+                  child: IgnorePointer(
+                    ignoring: _hideEverything,
+                    child: Stack(
+                      children: [
+                        // Chat Sidebar
+                        if (_showChatSidebar)
+                          Positioned.fill(
+                            child: FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: BackdropFilter(
+                                filter:
+                                    ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                                child: ChatSidebar(
+                                  scrollController: _scrollController,
+                                  onClose: () {
+                                    _chipAutoHideTimer?.cancel();
+                                    _animationController.reverse().then((_) {
+                                      setState(() => _showChatSidebar = false);
+                                    });
+                                  },
+                                  onFollowUpTap: (question) {
+                                    _textController.text = question;
+                                    _sendMessage(question, context);
+                                  },
+                                  onLoginTap: _toggleLoginModal,
+                                  messageController: _textController,
+                                  onSendMessage: () {
+                                    final text = _textController.text.trim();
+                                    if (text.isNotEmpty) {
+                                      _sendMessage(text, context);
+                                    }
+                                  },
+                                  isRecording: _isRecording,
+                                  isAudioPlaying: _isAudioPlaying,
+                                  onMicTap: _toggleListening,
+                                  onStopAudio: _stopAudio,
+                                  // Adjust bottom padding for keyboard
+                                  bottomPadding: keyboardHeight + 90,
+                                ),
                               ),
                             ),
                           ),
-                        ),
 
-                      // Top bar with menu and login
-                      // Hide when menu drawer is open
-                      if (!_showMenuDrawer)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: SafeArea(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 16),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Top left button - Hamburger menu OR Close button when chat is open
-                                      // Hide during screen recording
-                                      if (!_isScreenRecording)
-                                        GestureDetector(
-                                          onTap: () {
-                                            if (_showChatSidebar) {
-                                              // Close chat sidebar
-                                              _chipAutoHideTimer?.cancel();
-                                              _animationController
-                                                  .reverse()
-                                                  .then((_) {
-                                                setState(() {
-                                                  _showChatSidebar = false;
+                        // Top bar with menu and login
+                        // Hide when menu drawer is open
+                        if (!_showMenuDrawer)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 16),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Top left button - Hamburger menu OR Close button when chat is open
+                                        // Hide during screen recording
+                                        if (!_isScreenRecording)
+                                          GestureDetector(
+                                            onTap: () {
+                                              if (_showChatSidebar) {
+                                                // Close chat sidebar
+                                                _chipAutoHideTimer?.cancel();
+                                                _animationController
+                                                    .reverse()
+                                                    .then((_) {
+                                                  setState(() {
+                                                    _showChatSidebar = false;
+                                                  });
                                                 });
-                                              });
-                                            } else {
-                                              // Toggle main menu
-                                              setState(() {
-                                                _showMainMenu = !_showMainMenu;
-                                              });
-                                            }
-                                          },
-                                          child: ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                            child: BackdropFilter(
-                                              filter: ImageFilter.blur(
-                                                  sigmaX: 12, sigmaY: 12),
-                                              child: Container(
-                                                width: 48,
-                                                height: 48,
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      const Color(0x1AFFFFFF),
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                  border: Border.all(
-                                                    color:
-                                                        const Color(0x33FFFFFF),
-                                                    width: 1,
-                                                  ),
-                                                ),
-                                                child: Center(
-                                                  // Show close icon when chat is open, hamburger otherwise
-                                                  child: _showChatSidebar
-                                                      ? const Icon(
-                                                          Icons.close,
-                                                          color: Colors.white,
-                                                          size: 24,
-                                                        )
-                                                      : const HamburgerIcon(
-                                                          size: 24),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      else
-                                        const SizedBox(
-                                            width:
-                                                48), // Placeholder to maintain spacing
-
-                                      // Spacer to push profile to the right
-                                      const Spacer(),
-
-                                      // Right side - Profile on top, Record button below (right-aligned column)
-                                      BlocBuilder<AuthBloc, AuthState>(
-                                        builder: (context, state) {
-                                          if (state is AuthAuthenticated &&
-                                              !_isScreenRecording) {
-                                            return Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
-                                              children: [
-                                                _buildCreditsAndProfile(
-                                                    context),
-                                                const SizedBox(height: 12),
-                                                _buildRecordButton(),
-                                              ],
-                                            );
-                                          }
-                                          if (_isScreenRecording) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          // Web: auth-glass-btn styling
-                                          // padding: 10px 12px, borderRadius: 16px,
-                                          // background: rgba(255, 255, 255, 0.01),
-                                          // border: 1px solid rgba(255, 255, 255, 0.08), blur: 16px
-                                          return GestureDetector(
-                                            onTap: _toggleLoginModal,
+                                              } else {
+                                                // Toggle main menu
+                                                setState(() {
+                                                  _showMainMenu =
+                                                      !_showMainMenu;
+                                                });
+                                              }
+                                            },
                                             child: ClipRRect(
                                               borderRadius:
                                                   BorderRadius.circular(16),
                                               child: BackdropFilter(
                                                 filter: ImageFilter.blur(
-                                                    sigmaX: 16, sigmaY: 16),
+                                                    sigmaX: 12, sigmaY: 12),
                                                 child: Container(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                    left: 18,
-                                                    right: 16,
-                                                    top: 12,
-                                                    bottom: 12,
-                                                  ),
+                                                  width: 48,
+                                                  height: 48,
                                                   decoration: BoxDecoration(
-                                                    // Web: rgba(255, 255, 255, 0.01)
                                                     color:
-                                                        const Color(0x03FFFFFF),
+                                                        const Color(0x1AFFFFFF),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                             16),
                                                     border: Border.all(
-                                                      // Web: rgba(255, 255, 255, 0.08)
                                                       color: const Color(
-                                                          0x14FFFFFF),
+                                                          0x33FFFFFF),
                                                       width: 1,
                                                     ),
                                                   ),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      // Web: RightArrow icon with mr-1 (14x21)
-                                                      const RightArrowIcon(
-                                                        size: 14,
-                                                        color: Colors.white,
-                                                      ),
-                                                      // Spacing between icon and text
-                                                      const SizedBox(width: 8),
-                                                      // Web: font-medium text-xl (20px) but using 18px for mobile
-                                                      // Use theme: titleLarge (18px)
-                                                      Text(
-                                                        'Login',
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .titleLarge!
-                                                            .copyWith(
-                                                              color:
-                                                                  Colors.white,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w500,
-                                                            ),
-                                                      ),
-                                                    ],
+                                                  child: Center(
+                                                    // Show close icon when chat is open, hamburger otherwise
+                                                    child: _showChatSidebar
+                                                        ? const Icon(
+                                                            Icons.close,
+                                                            color: Colors.white,
+                                                            size: 24,
+                                                          )
+                                                        : const HamburgerIcon(
+                                                            size: 24),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                  // Recording button - appears below profile avatar when authenticated
-                                  // Hidden when recording is active or when chat sidebar is open
-                                  // Fades in with profile avatar
-                                  if (!_showChatSidebar)
-                                    BlocBuilder<AuthBloc, AuthState>(
-                                      builder: (context, authState) {
-                                        if (authState is AuthAuthenticated &&
-                                            !_isScreenRecording) {
-                                          // Wait for credits to load before showing (matches profile fade)
-                                          return BlocBuilder<CreditsBloc,
-                                              CreditsState>(
-                                            builder: (context, creditsState) {
-                                              if (creditsState
-                                                  is! CreditsLoaded) {
-                                                return const SizedBox.shrink();
-                                              }
-                                              return TweenAnimationBuilder<
-                                                  double>(
-                                                tween:
-                                                    Tween(begin: 0.0, end: 1.0),
-                                                duration: const Duration(
-                                                    milliseconds: 400),
-                                                curve: Curves.easeIn,
-                                                builder:
-                                                    (context, opacity, child) {
-                                                  return Opacity(
-                                                    opacity: opacity,
-                                                    child: child,
-                                                  );
-                                                },
-                                                child: const SizedBox.shrink(),
-                                              );
-                                            },
-                                          );
-                                        }
-                                        return const SizedBox.shrink();
-                                      },
-                                    ),
-                                  // "Hide everything" button - only shown when env var is set
-                                  if (dotenv.env['SHOW_HIDE_OPTION'] == 'true')
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          GestureDetector(
-                                            onTap: () => setState(
-                                                () => _hideEverything = true),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 16,
-                                                vertical: 10,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: [
-                                                    Colors.white
-                                                        .withOpacity(0.18),
-                                                    Colors.white
-                                                        .withOpacity(0.10),
-                                                  ],
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(13),
-                                                border: Border.all(
-                                                  color: Colors.white
-                                                      .withOpacity(0.32),
-                                                  width: 1.2,
-                                                ),
-                                              ),
-                                              child: Row(
+                                          )
+                                        else
+                                          const SizedBox(
+                                              width:
+                                                  48), // Placeholder to maintain spacing
+
+                                        // Spacer to push profile to the right
+                                        const Spacer(),
+
+                                        // Right side - Profile on top, Record button below (right-aligned column)
+                                        BlocBuilder<AuthBloc, AuthState>(
+                                          builder: (context, state) {
+                                            if (state is AuthAuthenticated &&
+                                                !_isScreenRecording) {
+                                              return Column(
                                                 mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
                                                 children: [
-                                                  Icon(
-                                                    Icons.visibility_off,
-                                                    color: Colors.white
-                                                        .withOpacity(0.9),
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    'Hide UI',
-                                                    style: TextStyle(
-                                                      color: Colors.white
-                                                          .withOpacity(0.9),
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.w500,
+                                                  _buildCreditsAndProfile(
+                                                      context),
+                                                  const SizedBox(height: 12),
+                                                  _buildRecordButton(),
+                                                ],
+                                              );
+                                            }
+                                            if (_isScreenRecording) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            // Web: auth-glass-btn styling
+                                            // padding: 10px 12px, borderRadius: 16px,
+                                            // background: rgba(255, 255, 255, 0.01),
+                                            // border: 1px solid rgba(255, 255, 255, 0.08), blur: 16px
+                                            return GestureDetector(
+                                              onTap: _toggleLoginModal,
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                child: BackdropFilter(
+                                                  filter: ImageFilter.blur(
+                                                      sigmaX: 16, sigmaY: 16),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      left: 18,
+                                                      right: 16,
+                                                      top: 12,
+                                                      bottom: 12,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      // Web: rgba(255, 255, 255, 0.01)
+                                                      color: const Color(
+                                                          0x03FFFFFF),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              16),
+                                                      border: Border.all(
+                                                        // Web: rgba(255, 255, 255, 0.08)
+                                                        color: const Color(
+                                                            0x14FFFFFF),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        // Web: RightArrow icon with mr-1 (14x21)
+                                                        const RightArrowIcon(
+                                                          size: 14,
+                                                          color: Colors.white,
+                                                        ),
+                                                        // Spacing between icon and text
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        // Web: font-medium text-xl (20px) but using 18px for mobile
+                                                        // Use theme: titleLarge (18px)
+                                                        Text(
+                                                          'Login',
+                                                          style:
+                                                              Theme.of(context)
+                                                                  .textTheme
+                                                                  .titleLarge!
+                                                                  .copyWith(
+                                                                    color: Colors
+                                                                        .white,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
-                                                ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    // Recording button - appears below profile avatar when authenticated
+                                    // Hidden when recording is active or when chat sidebar is open
+                                    // Fades in with profile avatar
+                                    if (!_showChatSidebar)
+                                      BlocBuilder<AuthBloc, AuthState>(
+                                        builder: (context, authState) {
+                                          if (authState is AuthAuthenticated &&
+                                              !_isScreenRecording) {
+                                            // Wait for credits to load before showing (matches profile fade)
+                                            return BlocBuilder<CreditsBloc,
+                                                CreditsState>(
+                                              builder: (context, creditsState) {
+                                                if (creditsState
+                                                    is! CreditsLoaded) {
+                                                  return const SizedBox
+                                                      .shrink();
+                                                }
+                                                return TweenAnimationBuilder<
+                                                    double>(
+                                                  tween: Tween(
+                                                      begin: 0.0, end: 1.0),
+                                                  duration: const Duration(
+                                                      milliseconds: 400),
+                                                  curve: Curves.easeIn,
+                                                  builder: (context, opacity,
+                                                      child) {
+                                                    return Opacity(
+                                                      opacity: opacity,
+                                                      child: child,
+                                                    );
+                                                  },
+                                                  child:
+                                                      const SizedBox.shrink(),
+                                                );
+                                              },
+                                            );
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      ),
+                                    // "Hide everything" button - only shown when env var is set
+                                    if (dotenv.env['SHOW_HIDE_OPTION'] ==
+                                        'true')
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () => setState(
+                                                  () => _hideEverything = true),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 16,
+                                                  vertical: 10,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Colors.white
+                                                          .withOpacity(0.18),
+                                                      Colors.white
+                                                          .withOpacity(0.10),
+                                                    ],
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(13),
+                                                  border: Border.all(
+                                                    color: Colors.white
+                                                        .withOpacity(0.32),
+                                                    width: 1.2,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.visibility_off,
+                                                      color: Colors.white
+                                                          .withOpacity(0.9),
+                                                      size: 18,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'Hide UI',
+                                                      style: TextStyle(
+                                                        color: Colors.white
+                                                            .withOpacity(0.9),
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        // Bottom center - Disclaimer (hide when generating/playing/chat/menu open)
+                        // Hide when chat sidebar or menu drawer is open
+
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: SafeArea(
+                            bottom: true,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Builder(
+                                builder: (context) {
+                                  // Show disclaimer when not generating/playing
+                                  final baseStyle = Theme.of(context)
+                                      .textTheme
+                                      .bodySmall!
+                                      .copyWith(
+                                        color: const Color(0x80FFFFFF),
+                                        height: 1.25,
+                                      );
+                                  return RichText(
+                                    textAlign: TextAlign.center,
+                                    text: TextSpan(
+                                      style: baseStyle,
+                                      children: [
+                                        const TextSpan(
+                                          text: 'Turiya',
+                                          style: TextStyle(
+                                              fontStyle: FontStyle.italic),
+                                        ),
+                                        const TextSpan(
+                                            text: ' can make mistakes. '),
+                                        TextSpan(
+                                          text: 'Check disclaimer.',
+                                          style: const TextStyle(
+                                            decoration:
+                                                TextDecoration.underline,
+                                            decorationColor: Color(0x80FFFFFF),
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () async {
+                                              final url = Uri.parse(
+                                                'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
+                                              );
+                                              if (await canLaunchUrl(url)) {
+                                                await launchUrl(url,
+                                                    mode: LaunchMode
+                                                        .externalApplication);
+                                              }
+                                            },
+                                        ),
+                                      ],
                                     ),
-                                ],
+                                  );
+                                },
                               ),
                             ),
                           ),
                         ),
 
-                      // Bottom center - Disclaimer (hide when generating/playing/chat/menu open)
-                      // Hide when chat sidebar or menu drawer is open
+                        // Main Menu (About, FAQs, Blog, Contact)
+                        MainMenu(
+                          isOpen: _showMainMenu,
+                          onClose: () {
+                            setState(() {
+                              _showMainMenu = false;
+                            });
+                          },
+                        ),
 
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: SafeArea(
-                          bottom: true,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Builder(
-                              builder: (context) {
-                                // Show disclaimer when not generating/playing
-                                final baseStyle = Theme.of(context)
-                                    .textTheme
-                                    .bodySmall!
-                                    .copyWith(
-                                      color: const Color(0x80FFFFFF),
-                                      height: 1.25,
-                                    );
-                                return RichText(
-                                  textAlign: TextAlign.center,
-                                  text: TextSpan(
-                                    style: baseStyle,
-                                    children: [
-                                      const TextSpan(
-                                        text: 'Turiya',
-                                        style: TextStyle(
-                                            fontStyle: FontStyle.italic),
-                                      ),
-                                      const TextSpan(
-                                          text: ' can make mistakes. '),
-                                      TextSpan(
-                                        text: 'Check disclaimer.',
-                                        style: const TextStyle(
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: Color(0x80FFFFFF),
-                                        ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () async {
-                                            final url = Uri.parse(
-                                              'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
-                                            );
-                                            if (await canLaunchUrl(url)) {
-                                              await launchUrl(url,
-                                                  mode: LaunchMode
-                                                      .externalApplication);
-                                            }
-                                          },
-                                      ),
-                                    ],
-                                  ),
+                        // Bottom Input Bar with Liquid Glass
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: keyboardHeight,
+                          child: SafeArea(
+                            bottom: true,
+                            child: Padding(
+                              // Consistent bottom margin to avoid UI shift during connection
+                              padding: const EdgeInsets.only(bottom: 28),
+                              child: BottomInputBar(
+                                textController: _textController,
+                                focusNode: _textFocusNode,
+                                isGenerating: _isGenerating,
+                                isRecording: _isRecording,
+                                isAudioPlaying: _isAudioPlaying,
+                                onSubmit: (text) => _sendMessage(text, context),
+                                onMicTap: _toggleListening,
+                                onStopAudio: _stopAudio,
+                                enabled: !_showLoginModal,
+                                // LiveKit voice mode
+                                isLiveKitConnected: _isLiveKitConnected,
+                                isLiveKitConnecting: _isLiveKitConnecting ||
+                                    _isLiveKitDisconnecting,
+                                onVoiceCallTap: _connectToLiveKit,
+                                onDisconnectLiveKit: _disconnectFromLiveKit,
+                                onSettingsTap: () {
+                                  setState(() {
+                                    _showMenuDrawer = true;
+                                  });
+                                  _animationController.forward();
+                                },
+                                isMicMuted:
+                                    !_liveKitService.isMicrophoneEnabled,
+                                onMicToggle: () async {
+                                  await _liveKitService.toggleMicrophone();
+                                  setState(() {});
+                                },
+                                // Chat button & pondering chip
+                                showChatButton: !_showChatSidebar,
+                                hidePonderingChip: _showChatSidebar,
+                                onChatButtonTap: () {
+                                  setState(() {
+                                    _showChatSidebar = true;
+                                    _showChip = false;
+                                  });
+                                  _animationController.forward();
+                                  Future.delayed(
+                                      const Duration(milliseconds: 100), () {
+                                    if (mounted && _showChatSidebar) {
+                                      setState(() => _showChip = true);
+                                      _startChipAutoHideTimer();
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // Profile Menu - renders on top of everything
+                        if (_showMenuDrawer)
+                          FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: ProfileMenu(
+                              onClose: () {
+                                _animationController.reverse().then((_) {
+                                  setState(() {
+                                    _showMenuDrawer = false;
+                                  });
+                                });
+                              },
+                            ),
+                          ),
+
+                        // Login Modal Overlay - renders on top of everything
+                        if (_showLoginModal)
+                          FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: BlocBuilder<AuthBloc, AuthState>(
+                              builder: (context, state) {
+                                return LoginModal(
+                                  onClose: _toggleLoginModal,
+                                  onGoogleSignIn: _handleGoogleSignIn,
+                                  isSigningIn: state is AuthLoading,
                                 );
                               },
                             ),
                           ),
-                        ),
-                      ),
-
-                      // Main Menu (About, FAQs, Blog, Contact)
-                      MainMenu(
-                        isOpen: _showMainMenu,
-                        onClose: () {
-                          setState(() {
-                            _showMainMenu = false;
-                          });
-                        },
-                      ),
-
-                      // Bottom Input Bar with Liquid Glass
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: keyboardHeight,
-                        child: SafeArea(
-                          bottom: true,
-                          child: Padding(
-                            // Consistent bottom margin to avoid UI shift during connection
-                            padding: const EdgeInsets.only(bottom: 28),
-                            child: BottomInputBar(
-                              textController: _textController,
-                              focusNode: _textFocusNode,
-                              isGenerating: _isGenerating,
-                              isRecording: _isRecording,
-                              isAudioPlaying: _isAudioPlaying,
-                              onSubmit: (text) => _sendMessage(text, context),
-                              onMicTap: _toggleListening,
-                              onStopAudio: _stopAudio,
-                              enabled: !_showLoginModal,
-                              // LiveKit voice mode
-                              isLiveKitConnected: _isLiveKitConnected,
-                              isLiveKitConnecting: _isLiveKitConnecting ||
-                                  _isLiveKitDisconnecting,
-                              onVoiceCallTap: _connectToLiveKit,
-                              onDisconnectLiveKit: _disconnectFromLiveKit,
-                              onSettingsTap: () {
-                                setState(() {
-                                  _showMenuDrawer = true;
-                                });
-                                _animationController.forward();
-                              },
-                              isMicMuted: !_liveKitService.isMicrophoneEnabled,
-                              onMicToggle: () async {
-                                await _liveKitService.toggleMicrophone();
-                                setState(() {});
-                              },
-                              // Chat button & pondering chip
-                              showChatButton: !_showChatSidebar,
-                              hidePonderingChip: _showChatSidebar,
-                              onChatButtonTap: () {
-                                setState(() {
-                                  _showChatSidebar = true;
-                                  _showChip = false;
-                                });
-                                _animationController.forward();
-                                Future.delayed(
-                                    const Duration(milliseconds: 100), () {
-                                  if (mounted && _showChatSidebar) {
-                                    setState(() => _showChip = true);
-                                    _startChipAutoHideTimer();
-                                  }
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Profile Menu - renders on top of everything
-                      if (_showMenuDrawer)
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: ProfileMenu(
-                            onClose: () {
-                              _animationController.reverse().then((_) {
-                                setState(() {
-                                  _showMenuDrawer = false;
-                                });
-                              });
-                            },
-                          ),
-                        ),
-
-                      // Login Modal Overlay - renders on top of everything
-                      if (_showLoginModal)
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: BlocBuilder<AuthBloc, AuthState>(
-                            builder: (context, state) {
-                              return LoginModal(
-                                onClose: _toggleLoginModal,
-                                onGoogleSignIn: _handleGoogleSignIn,
-                                isSigningIn: state is AuthLoading,
-                              );
-                            },
-                          ),
-                        ),
-                    ], // Close main Stack children
-                  ), // Close main Stack
-                ), // Close GestureDetector (Scaffold body)
+                      ], // Close inner Stack children (UI elements)
+                    ), // Close inner Stack
+                  ), // Close IgnorePointer
+                ), // Close AnimatedOpacity
+              ], // Close outer Stack children
+            ), // Close outer Stack
+          ), // Close GestureDetector (Scaffold body)
         ), // Close Scaffold
       ), // Close PopScope
     );
