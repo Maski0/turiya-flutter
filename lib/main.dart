@@ -2259,14 +2259,27 @@ class _MainScreenState extends State<_MainScreen>
   Future<void> _startPendingRecording() async {
     if (!_pendingScreenRecording) return;
 
+    debugPrint('🎬 _startPendingRecording called - starting UI fade');
+
     setState(() {
       _pendingScreenRecording = false;
-      _hideEverything = true; // Hide UI
+      _hideEverything = true; // Hide UI - triggers AnimatedOpacity
       _recordingStatusMessage = 'Recording...';
     });
 
-    // Wait for UI to fade out
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Wait for UI to fade out (AnimatedOpacity takes 400ms)
+    debugPrint('🎬 Waiting 500ms for UI fade animation...');
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Force speaker BEFORE recording (to ensure correct audio route)
+    if (Platform.isIOS || Platform.isAndroid) {
+      try {
+        await Hardware.instance.setSpeakerphoneOn(true);
+        debugPrint('🔊 Pre-recording: Forced audio output to speaker');
+      } catch (e) {
+        debugPrint('⚠️ Error forcing speaker output: $e');
+      }
+    }
 
     // Start actual recording
     bool started = await _screenRecordingService.startRecording();
@@ -2277,15 +2290,15 @@ class _MainScreenState extends State<_MainScreen>
         _recordingStartTime = DateTime.now();
       });
 
-      // Force audio back to speaker (recording with mic changes audio session)
-      // Call twice with delay to ensure it takes effect
+      // Force speaker AGAIN after recording starts (in case recording changed it)
       if (Platform.isIOS || Platform.isAndroid) {
         try {
+          await Future.delayed(const Duration(milliseconds: 50));
           await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Forced audio output to speaker (1st call)');
+          debugPrint('🔊 Post-recording: Forced audio output to speaker (1st)');
           await Future.delayed(const Duration(milliseconds: 100));
           await Hardware.instance.setSpeakerphoneOn(true);
-          debugPrint('🔊 Forced audio output to speaker (2nd call)');
+          debugPrint('🔊 Post-recording: Forced audio output to speaker (2nd)');
         } catch (e) {
           debugPrint('⚠️ Error forcing speaker output: $e');
         }
