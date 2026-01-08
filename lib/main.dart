@@ -2295,17 +2295,15 @@ class _MainScreenState extends State<_MainScreen>
     if (path != null && mounted) {
       setState(() {
         _savedRecordingPath = path;
-        _recordingStatusMessage = 'Saved! Tap to view';
+        _recordingStatusMessage = '';
       });
 
-      // Auto-hide status after 5 seconds
-      Future.delayed(const Duration(seconds: 5), () {
-        if (mounted && _recordingStatusMessage == 'Saved! Tap to view') {
-          setState(() {
-            _recordingStatusMessage = '';
-            _savedRecordingPath = null;
-          });
-        }
+      // Automatically show the recording preview
+      RecordingPreviewOverlay.show(context, path);
+      
+      // Clear the saved path after showing preview
+      setState(() {
+        _savedRecordingPath = null;
       });
     } else {
       setState(() {
