@@ -1641,6 +1641,12 @@ class _MainScreenState extends State<_MainScreen>
                                   await _liveKitService.toggleMicrophone();
                                   setState(() {});
                                 },
+                                isMusicMuted:
+                                    !BackgroundAudioService().isPlaying,
+                                onMusicToggle: () async {
+                                  await BackgroundAudioService().toggle();
+                                  setState(() {});
+                                },
                                 // Chat button & pondering chip
                                 showChatButton: !_showChatSidebar,
                                 hidePonderingChip: _showChatSidebar,

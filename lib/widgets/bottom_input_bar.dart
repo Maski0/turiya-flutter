@@ -26,6 +26,9 @@ class BottomInputBar extends StatefulWidget {
   final VoidCallback? onSettingsTap;
   final bool isMicMuted;
   final VoidCallback? onMicToggle;
+  // Music state in voice mode
+  final bool isMusicMuted;
+  final VoidCallback? onMusicToggle;
   // Chat button
   final bool showChatButton;
   final VoidCallback? onChatButtonTap;
@@ -51,6 +54,8 @@ class BottomInputBar extends StatefulWidget {
     this.onSettingsTap,
     this.isMicMuted = false,
     this.onMicToggle,
+    this.isMusicMuted = false,
+    this.onMusicToggle,
     this.showChatButton = false,
     this.onChatButtonTap,
     this.hidePonderingChip = false,
@@ -158,9 +163,47 @@ class _BottomInputBarState extends State<BottomInputBar> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Music Toggle button
+          Tooltip(
+            message: widget.isMusicMuted ? 'Unmute Music' : 'Mute Music',
+            child: GestureDetector(
+              onTap: widget.onMusicToggle,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: widget.isMusicMuted
+                          ? const Color(0x40FFFFFF)
+                          : const Color(0x28FFFFFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0x40FFFFFF),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        widget.isMusicMuted
+                            ? Icons.music_off
+                            : Icons.music_note,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+
           // Mic Toggle button
           Tooltip(
-            message: widget.isMicMuted ? 'Unmute' : 'Mute',
+            message: widget.isMicMuted ? 'Unmute Mic' : 'Mute Mic',
             child: GestureDetector(
               onTap: widget.onMicToggle,
               child: ClipRRect(
