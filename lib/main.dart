@@ -2281,13 +2281,13 @@ class _MainScreenState extends State<_MainScreen>
           onTap: () => Navigator.of(dialogContext).pop(false),
           child: Stack(
             children: [
-              // Blurred background overlay - same as login modal
+              // Blurred background overlay - stronger blur
               Positioned.fill(
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                   child: Container(
-                    // Very subtle white, NOT black - matches login modal
-                    color: const Color(0x03FFFFFF),
+                    // Slightly more visible overlay for better blur effect
+                    color: const Color(0x10000000),
                   ),
                 ),
               ),
@@ -2339,9 +2339,16 @@ class _MainScreenState extends State<_MainScreen>
                                 Container(
                                   width: 12,
                                   height: 12,
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     color: Colors.red,
                                     shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.red.withOpacity(0.4),
+                                        blurRadius: 8,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -2383,14 +2390,16 @@ class _MainScreenState extends State<_MainScreen>
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: BackdropFilter(
-                                      filter:
-                                          ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 16, sigmaY: 16),
                                       child: Material(
                                         color: Colors.transparent,
                                         child: InkWell(
-                                          onTap: () => Navigator.of(dialogContext)
-                                              .pop(true),
-                                          borderRadius: BorderRadius.circular(12),
+                                          onTap: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(true),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                           child: Container(
                                             width: double.infinity,
                                             padding: const EdgeInsets.symmetric(
@@ -2414,7 +2423,8 @@ class _MainScreenState extends State<_MainScreen>
                                                     .titleLarge!
                                                     .copyWith(
                                                       color: Colors.black,
-                                                      fontWeight: FontWeight.w500,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                       height: 1.75,
                                                     ),
                                               ),
@@ -2429,14 +2439,16 @@ class _MainScreenState extends State<_MainScreen>
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: BackdropFilter(
-                                      filter:
-                                          ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 16, sigmaY: 16),
                                       child: Material(
                                         color: Colors.transparent,
                                         child: InkWell(
-                                          onTap: () => Navigator.of(dialogContext)
-                                              .pop(false),
-                                          borderRadius: BorderRadius.circular(12),
+                                          onTap: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(false),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                           child: Container(
                                             width: double.infinity,
                                             padding: const EdgeInsets.symmetric(
@@ -2460,7 +2472,8 @@ class _MainScreenState extends State<_MainScreen>
                                                     .titleLarge!
                                                     .copyWith(
                                                       color: Colors.white,
-                                                      fontWeight: FontWeight.w500,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                       height: 1.75,
                                                     ),
                                               ),
