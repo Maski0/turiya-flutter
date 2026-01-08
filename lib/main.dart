@@ -1662,6 +1662,15 @@ class _MainScreenState extends State<_MainScreen>
                     ), // Close inner Stack
                   ), // Close IgnorePointer
                 ), // Close AnimatedOpacity
+
+                // Saved recording popup (shows after recording stops)
+                if (_savedRecordingPath != null)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 16,
+                    left: 0,
+                    right: 0,
+                    child: _buildSavedRecordingPopup(),
+                  ),
               ], // Close outer Stack children
             ), // Close outer Stack
           ), // Close GestureDetector (Scaffold body)
@@ -2335,96 +2344,131 @@ class _MainScreenState extends State<_MainScreen>
     }
   }
 
-  /// Stop recording and show UI again
+  /// Stop recording and show UI again - SIMPLE VERSION
   Future<void> _stopRecordingAndShowUI() async {
-    debugPrint('🛑 _stopRecordingAndShowUI called at ${DateTime.now()}');
-    debugPrint('🛑 _isScreenRecording: $_isScreenRecording');
-    debugPrint('🛑 _recordingStartTime: $_recordingStartTime');
-    debugPrint(
-        '🛑 _expectedRecordingDurationSeconds: $_expectedRecordingDurationSeconds');
+    if (!_isScreenRecording) return;
 
-    if (!_isScreenRecording) {
-      debugPrint('🛑 Not recording, returning early');
-      return;
-    }
-
-    // Wait for expected recording duration if we have it (audio duration + buffer)
-    if (_expectedRecordingDurationSeconds != null &&
-        _recordingStartTime != null) {
-      final expectedDuration = Duration(
-          milliseconds: (_expectedRecordingDurationSeconds! * 1000).toInt());
-      final elapsed = DateTime.now().difference(_recordingStartTime!);
-      debugPrint(
-          '🛑 Elapsed since recording start: ${elapsed.inMilliseconds}ms');
-      debugPrint('🛑 Expected duration: ${expectedDuration.inMilliseconds}ms');
-      if (elapsed < expectedDuration) {
-        final remaining = expectedDuration - elapsed;
-        debugPrint(
-            '⏳ Waiting ${remaining.inMilliseconds}ms for expected recording duration (audio: ${_expectedRecordingDurationSeconds}s)');
-        await Future.delayed(remaining);
-      } else {
-        debugPrint('🛑 Already past expected duration, not waiting');
-      }
-    } else {
-      // Fallback: ensure minimum recording duration of 5 seconds
-      const minRecordingDuration = Duration(seconds: 5);
-      if (_recordingStartTime != null) {
-        final elapsed = DateTime.now().difference(_recordingStartTime!);
-        if (elapsed < minRecordingDuration) {
-          final remaining = minRecordingDuration - elapsed;
-          debugPrint(
-              '⏳ Waiting ${remaining.inMilliseconds}ms for minimum recording duration');
-          await Future.delayed(remaining);
-        }
-      } else {
-        debugPrint('🛑 No recording start time, using fallback 5s wait');
-        await Future.delayed(const Duration(seconds: 5));
-      }
-    }
-
-    // Clear the expected duration
-    _expectedRecordingDurationSeconds = null;
-
-    setState(() {
-      _recordingStatusMessage = 'Saving...';
-    });
-
-    // Stop recording
-    debugPrint('🛑 Calling stopRecording() at ${DateTime.now()}');
-    String? path = await _screenRecordingService.stopRecording();
-    debugPrint('🛑 stopRecording() returned: $path at ${DateTime.now()}');
+    debugPrint('🛑 Stopping recording immediately');
 
     // Cancel auto-stop timer
     _recordingAutoStopTimer?.cancel();
     _recordingAutoStopTimer = null;
+    _expectedRecordingDurationSeconds = null;
+
+    // Show UI first (fade in starts)
+    setState(() {
+      _hideEverything = false;
+      _recordingStatusMessage = 'Saving...';
+    });
+
+    // Wait for UI fade in
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Now stop recording
+    String? path = await _screenRecordingService.stopRecording();
+    debugPrint('🛑 Recording saved: $path');
 
     setState(() {
       _isScreenRecording = false;
       _recordingStartTime = null;
-      _hideEverything = false; // Show UI again
+      _recordingStatusMessage = '';
     });
 
     if (path != null && mounted) {
+      // Show popup notification
       setState(() {
         _savedRecordingPath = path;
-        _recordingStatusMessage = '';
       });
 
-      // Automatically show the recording preview
-      RecordingPreviewOverlay.show(context, path);
-
-      // Clear the saved path after showing preview
-      setState(() {
-        _savedRecordingPath = null;
+      // Auto-hide popup after 10 seconds
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && _savedRecordingPath == path) {
+          setState(() {
+            _savedRecordingPath = null;
+          });
+        }
       });
-    } else {
-      setState(() {
-        _recordingStatusMessage = '';
-      });
-      if (mounted) {
-        ToastUtils.showError(context, 'Failed to save recording');
-      }
+    } else if (mounted) {
+      ToastUtils.showError(context, 'Failed to save recording');
     }
+  }
+
+  /// Build saved recording popup
+  Widget _buildSavedRecordingPopup() {
+    if (_savedRecordingPath == null) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () {
+        final path = _savedRecordingPath;
+        if (path != null) {
+          RecordingPreviewOverlay.show(context, path);
+          setState(() => _savedRecordingPath = null);
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check, color: Colors.green, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Recording Saved',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  Text(
+                    'Tap to view',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'View',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => setState(() => _savedRecordingPath = null),
+              child: Icon(Icons.close,
+                  color: Colors.white.withOpacity(0.5), size: 20),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Build recording status widget for top center
