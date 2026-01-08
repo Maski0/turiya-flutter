@@ -26,9 +26,6 @@ class BottomInputBar extends StatefulWidget {
   final VoidCallback? onSettingsTap;
   final bool isMicMuted;
   final VoidCallback? onMicToggle;
-  // Music state in voice mode
-  final bool isMusicMuted;
-  final VoidCallback? onMusicToggle;
   // Chat button
   final bool showChatButton;
   final VoidCallback? onChatButtonTap;
@@ -54,8 +51,6 @@ class BottomInputBar extends StatefulWidget {
     this.onSettingsTap,
     this.isMicMuted = false,
     this.onMicToggle,
-    this.isMusicMuted = false,
-    this.onMusicToggle,
     this.showChatButton = false,
     this.onChatButtonTap,
     this.hidePonderingChip = false,
@@ -163,44 +158,6 @@ class _BottomInputBarState extends State<BottomInputBar> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Music Toggle button
-          Tooltip(
-            message: widget.isMusicMuted ? 'Unmute Music' : 'Mute Music',
-            child: GestureDetector(
-              onTap: widget.onMusicToggle,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: widget.isMusicMuted
-                          ? const Color(0x40FFFFFF)
-                          : const Color(0x28FFFFFF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0x40FFFFFF),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        widget.isMusicMuted
-                            ? Icons.music_off
-                            : Icons.music_note,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-
           // Mic Toggle button
           Tooltip(
             message: widget.isMicMuted ? 'Unmute Mic' : 'Mute Mic',
@@ -330,10 +287,10 @@ class _BottomInputBarState extends State<BottomInputBar> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
           // Input container - expands to fill available space
-        Expanded(
+          Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(
@@ -533,16 +490,16 @@ class _BottomInputBarState extends State<BottomInputBar> {
                       ),
                       child: const Center(
                         child: TextChatIcon(size: 18),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
           ] else ...[
             // Chat sidebar OR main screen without chat icon: Voice takes rightmost position
-        Padding(
-          padding: const EdgeInsets.only(left: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
               child: _buildVoiceCallButton(),
             ),
           ],
@@ -553,35 +510,35 @@ class _BottomInputBarState extends State<BottomInputBar> {
 
   Widget _buildVoiceCallButton() {
     return AnimatedStarBorder(
-            color: const Color(0x99FFFFFF),
-            speed: const Duration(seconds: 8),
-            child: Tooltip(
-              message: 'Voice Call',
-              child: GestureDetector(
-                onTap: widget.onVoiceCallTap,
-                child: ClipRRect(
+      color: const Color(0x99FFFFFF),
+      speed: const Duration(seconds: 8),
+      child: Tooltip(
+        message: 'Voice Call',
+        child: GestureDetector(
+          onTap: widget.onVoiceCallTap,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0x28FFFFFF),
                   borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      height: 48,
-                      width: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0x28FFFFFF),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0x40FFFFFF),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: const Center(
-                        child: VoiceModeIcon(size: 20),
-                      ),
-                    ),
+                  border: Border.all(
+                    color: const Color(0x40FFFFFF),
+                    width: 0.5,
                   ),
+                ),
+                child: const Center(
+                  child: VoiceModeIcon(size: 20),
                 ),
               ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }
