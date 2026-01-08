@@ -2635,8 +2635,7 @@ class _RecordingPermissionDialogState
       setState(() {
         _micGranted = micStatus.isGranted;
         // Accept both granted and limited as "granted" for photos
-        _photosGranted =
-            photosStatus.isGranted || photosStatus.isLimited;
+        _photosGranted = photosStatus.isGranted || photosStatus.isLimited;
         _isLoading = false;
       });
     }
