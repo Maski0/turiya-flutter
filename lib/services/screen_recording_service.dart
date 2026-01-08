@@ -67,7 +67,8 @@ class ScreenRecordingService {
       final videoName = 'turiya_recording_$timestamp';
 
       // Record WITH audio - we'll handle speaker routing in main.dart
-      final started = await FlutterScreenRecording.startRecordScreenAndAudio(videoName);
+      final started =
+          await FlutterScreenRecording.startRecordScreenAndAudio(videoName);
       debugPrint('🎬 startRecordScreenAndAudio returned: $started');
 
       if (started) {
@@ -78,7 +79,8 @@ class ScreenRecordingService {
 
       // Fallback to video-only if audio recording fails
       debugPrint('🎬 Audio recording failed, trying video only...');
-      final startedNoAudio = await FlutterScreenRecording.startRecordScreen(videoName);
+      final startedNoAudio =
+          await FlutterScreenRecording.startRecordScreen(videoName);
       if (startedNoAudio) {
         _isRecording = true;
         debugPrint('✅ Native screen recording started (video only fallback)');

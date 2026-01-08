@@ -216,6 +216,7 @@ class _MainScreenState extends State<_MainScreen>
   bool _pendingScreenRecording = false;
   String _recordingStatusMessage = ''; // For showing status in top bar
   String? _savedRecordingPath; // Path to saved recording
+  bool _showRecordingPopup = false; // For slide animation control
   double?
       _expectedRecordingDurationSeconds; // Expected duration from audio response
 
@@ -1666,13 +1667,24 @@ class _MainScreenState extends State<_MainScreen>
                   ), // Close IgnorePointer
                 ), // Close AnimatedOpacity
 
-                // Saved recording popup (shows after recording stops)
+                // Saved recording popup (shows after recording stops) - slides down from top
                 if (_savedRecordingPath != null)
                   Positioned(
                     top: MediaQuery.of(context).padding.top + 16,
                     left: 0,
                     right: 0,
-                    child: _buildSavedRecordingPopup(),
+                    child: AnimatedSlide(
+                      offset: _showRecordingPopup
+                          ? Offset.zero
+                          : const Offset(0, -1),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                      child: AnimatedOpacity(
+                        opacity: _showRecordingPopup ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: _buildSavedRecordingPopup(),
+                      ),
+                    ),
                   ),
               ], // Close outer Stack children
             ), // Close outer Stack
@@ -2310,7 +2322,7 @@ class _MainScreenState extends State<_MainScreen>
         } catch (e) {
           debugPrint('⚠️ Error forcing speaker: $e');
         }
-        
+
         // Force again after a short delay
         await Future.delayed(const Duration(milliseconds: 200));
         try {
@@ -2319,7 +2331,7 @@ class _MainScreenState extends State<_MainScreen>
         } catch (e) {
           debugPrint('⚠️ Error forcing speaker: $e');
         }
-        
+
         // And again before audio starts
         await Future.delayed(const Duration(milliseconds: 300));
         try {
@@ -2353,27 +2365,33 @@ class _MainScreenState extends State<_MainScreen>
     }
   }
 
-  /// Stop recording and show UI again - SIMPLE VERSION
+  /// Stop recording and show UI again
   Future<void> _stopRecordingAndShowUI() async {
     if (!_isScreenRecording) return;
 
-    debugPrint('🛑 Stopping recording immediately');
+    debugPrint('🛑 Starting stop recording sequence...');
 
     // Cancel auto-stop timer
     _recordingAutoStopTimer?.cancel();
     _recordingAutoStopTimer = null;
     _expectedRecordingDurationSeconds = null;
 
-    // Show UI first (fade in starts)
+    // Step 1: Wait 4 extra seconds to capture more of the video + layout
+    debugPrint('⏳ Waiting 4 extra seconds before stopping...');
+    await Future.delayed(const Duration(seconds: 4));
+
+    // Step 2: Show UI first (fade in starts) - this gets recorded too
+    debugPrint('🎬 Showing UI (fade in)...');
     setState(() {
       _hideEverything = false;
       _recordingStatusMessage = 'Saving...';
     });
 
-    // Wait for UI fade in
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Step 3: Wait for UI fade in animation (400ms) + small buffer
+    await Future.delayed(const Duration(milliseconds: 600));
 
-    // Now stop recording
+    // Step 4: Now stop recording
+    debugPrint('🛑 Stopping recording now...');
     String? path = await _screenRecordingService.stopRecording();
     debugPrint('🛑 Recording saved: $path');
 
@@ -2383,23 +2401,51 @@ class _MainScreenState extends State<_MainScreen>
       _recordingStatusMessage = '';
     });
 
+    // Step 5: Show popup with slide animation after a delay
     if (path != null && mounted) {
-      // Show popup notification
+      // Wait a moment before showing popup
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Show popup notification with slide animation
       setState(() {
         _savedRecordingPath = path;
+        _showRecordingPopup = true;
       });
 
       // Auto-hide popup after 10 seconds
       Future.delayed(const Duration(seconds: 10), () {
         if (mounted && _savedRecordingPath == path) {
           setState(() {
-            _savedRecordingPath = null;
+            _showRecordingPopup = false;
+          });
+          // Clear path after animation
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && _savedRecordingPath == path) {
+              setState(() {
+                _savedRecordingPath = null;
+              });
+            }
           });
         }
       });
     } else if (mounted) {
       ToastUtils.showError(context, 'Failed to save recording');
     }
+  }
+
+  /// Hide recording popup with animation
+  void _hideRecordingPopup() {
+    setState(() {
+      _showRecordingPopup = false;
+    });
+    // Clear path after animation completes
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _savedRecordingPath = null;
+        });
+      }
+    });
   }
 
   /// Build saved recording popup
@@ -2411,7 +2457,7 @@ class _MainScreenState extends State<_MainScreen>
         final path = _savedRecordingPath;
         if (path != null) {
           RecordingPreviewOverlay.show(context, path);
-          setState(() => _savedRecordingPath = null);
+          _hideRecordingPopup();
         }
       },
       child: Container(
@@ -2470,7 +2516,7 @@ class _MainScreenState extends State<_MainScreen>
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () => setState(() => _savedRecordingPath = null),
+              onTap: _hideRecordingPopup,
               child: Icon(Icons.close,
                   color: Colors.white.withOpacity(0.5), size: 20),
             ),
