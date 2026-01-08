@@ -2282,13 +2282,13 @@ class _MainScreenState extends State<_MainScreen>
           onTap: () => Navigator.of(dialogContext).pop(false),
           child: Stack(
             children: [
-              // Blurred background overlay - stronger blur
+              // Blurred background overlay - covers entire screen including all UI
               Positioned.fill(
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                  filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                   child: Container(
-                    // Slightly more visible overlay for better blur effect
-                    color: const Color(0x10000000),
+                    // Darker overlay for stronger blur effect
+                    color: const Color(0x40000000),
                   ),
                 ),
               ),
