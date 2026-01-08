@@ -1607,57 +1607,59 @@ class _MainScreenState extends State<_MainScreen>
   }
 
   Future<void> _startListening() async {
-    // Check microphone permission
+    // Request microphone permission
     var status = await Permission.microphone.status;
-    if (status.isPermanentlyDenied || status.isDenied) {
-      if (mounted) {
-        final shouldOpenSettings = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.white.withOpacity(0.1)),
-            ),
-            title: const Text('Microphone Permission',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            content: const Text(
-              'Microphone access is needed for voice input.\n\n'
-              'Please enable it in Settings > Turiya > Microphone.',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child:
-                    Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Open Settings',
-                    style: TextStyle(color: Color(0xFF22C55E))),
-              ),
-            ],
-          ),
-        );
-        if (shouldOpenSettings == true) {
-          await openAppSettings();
-        }
-      }
-      return;
-    }
-
+    
+    // If not granted, request permission first (shows native iOS popup)
     if (!status.isGranted) {
       status = await Permission.microphone.request();
-      if (!status.isGranted) {
+    }
+    
+    // If still not granted, show settings dialog only if permanently denied
+    if (!status.isGranted) {
+      if (status.isPermanentlyDenied) {
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+              ),
+              title: const Text('Microphone Permission',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              content: const Text(
+                'Microphone access is needed for voice input.\n\n'
+                'Please enable it in Settings > Turiya > Microphone.',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Color(0xFF22C55E))),
+                ),
+              ],
+            ),
+          );
+          if (shouldOpenSettings == true) {
+            await openAppSettings();
+          }
+        }
+      } else {
         if (mounted) {
           ToastUtils.showError(context, 'Microphone permission required');
         }
-        return;
       }
+      return;
     }
 
     bool available = await _speechToText.initialize(
@@ -2172,56 +2174,58 @@ class _MainScreenState extends State<_MainScreen>
         }
       }
     } else {
-      // Request microphone permission first for audio recording
-      final micStatus = await Permission.microphone.status;
-      if (micStatus.isPermanentlyDenied || micStatus.isDenied) {
-        if (mounted) {
-          final shouldOpenSettings = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.white.withOpacity(0.1)),
-              ),
-              title: const Text('Microphone Permission',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-              content: const Text(
-                'Microphone access is needed for recording audio.\n\n'
-                'Please enable it in Settings > Turiya > Microphone.',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child:
-                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Open Settings',
-                      style: TextStyle(color: Color(0xFF22C55E))),
-                ),
-              ],
-            ),
-          );
-          if (shouldOpenSettings == true) {
-            await openAppSettings();
-          }
-        }
-        return;
-      }
+      // Request microphone permission for audio recording
+      var micStatus = await Permission.microphone.status;
+      
+      // If not granted, request permission first (shows native iOS popup)
       if (!micStatus.isGranted) {
-        final result = await Permission.microphone.request();
-        if (!result.isGranted) {
+        micStatus = await Permission.microphone.request();
+      }
+      
+      // If still not granted after request, show settings dialog only if permanently denied
+      if (!micStatus.isGranted) {
+        if (micStatus.isPermanentlyDenied) {
           if (mounted) {
-            ToastUtils.showError(
-                context, 'Microphone permission required for audio');
+            final shouldOpenSettings = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                ),
+                title: const Text('Microphone Permission',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                content: const Text(
+                  'Microphone access is needed for recording audio.\n\n'
+                  'Please enable it in Settings > Turiya > Microphone.',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Open Settings',
+                        style: TextStyle(color: Color(0xFF22C55E))),
+                  ),
+                ],
+              ),
+            );
+            if (shouldOpenSettings == true) {
+              await openAppSettings();
+            }
           }
-          // Continue anyway - recording will work without audio
+          return;
+        }
+        // User denied but not permanently - continue without audio
+        if (mounted) {
+          ToastUtils.showInfo(context, 'Recording will proceed without audio');
         }
       }
 
