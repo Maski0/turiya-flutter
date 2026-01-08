@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,7 +71,9 @@ class ExampleApp extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (context) => AuthBloc()),
-        BlocProvider(create: (context) => ChatBloc(cacheService: cacheService, liveKitService: liveKitService)),
+        BlocProvider(
+            create: (context) => ChatBloc(
+                cacheService: cacheService, liveKitService: liveKitService)),
         BlocProvider(create: (context) => CreditsBloc()),
         BlocProvider(create: (context) => MemoryBloc()),
       ],
@@ -159,19 +160,20 @@ class _MainScreenState extends State<_MainScreen>
 
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _connectLiveKitIfAuthenticated();
-      
+
       // Listen to LiveKit agent state
       final liveKitService = context.read<ChatBloc>().liveKitService;
       liveKitService.onAgentStateChanged.listen((agentState) {
         if (mounted) {
           setState(() {
-            _isAgentConnecting = agentState.toString() == 'AgentState.connecting';
+            _isAgentConnecting =
+                agentState.toString() == 'AgentState.connecting';
             // Also update generating state based on agent thinking/speaking
-            _isGenerating = agentState.toString() == 'AgentState.thinking' || 
-                           agentState.toString() == 'AgentState.speaking';
+            _isGenerating = agentState.toString() == 'AgentState.thinking' ||
+                agentState.toString() == 'AgentState.speaking';
           });
         }
       });
@@ -254,14 +256,15 @@ class _MainScreenState extends State<_MainScreen>
       // Get the access token from the current session
       final session = supabase.Supabase.instance.client.auth.currentSession;
       final authToken = session?.accessToken;
-      
+
       if (authToken == null) {
         print('❌ No access token available, cannot connect to LiveKit');
         return;
       }
 
       final liveKitService = context.read<ChatBloc>().liveKitService;
-      await liveKitService.connect(cachedThreadId, user.id, authToken: authToken);
+      await liveKitService.connect(cachedThreadId, user.id,
+          authToken: authToken);
       print('✅ LiveKit connected successfully on app start');
     } catch (e, stackTrace) {
       print('❌ LiveKit connection failed on app start: $e');
@@ -312,7 +315,7 @@ class _MainScreenState extends State<_MainScreen>
         // 3. Stream auto-updates UI
         print('📤 Dispatching ChatHistoryRequested for thread: $threadId');
         context.read<ChatBloc>().add(ChatHistoryRequested(threadId));
-        
+
         // Connect to LiveKit for real-time audio communication
         print('🔌 Connecting to LiveKit...');
         final liveKitService = context.read<ChatBloc>().liveKitService;
@@ -320,7 +323,7 @@ class _MainScreenState extends State<_MainScreen>
           // Get the access token from the current session
           final session = supabase.Supabase.instance.client.auth.currentSession;
           final authToken = session?.accessToken;
-          
+
           if (authToken == null) {
             print('❌ No access token available, cannot connect to LiveKit');
           } else {
@@ -330,14 +333,15 @@ class _MainScreenState extends State<_MainScreen>
                 _isAgentConnecting = true;
               });
             }
-            
-            await liveKitService.connect(threadId, user.id, authToken: authToken);
+
+            await liveKitService.connect(threadId, user.id,
+                authToken: authToken);
             print('✅ LiveKit connected successfully');
           }
         } catch (e, stackTrace) {
           print('❌ LiveKit connection failed: $e');
           print('   Stack trace: $stackTrace');
-          
+
           // Reset connecting state on error
           if (mounted) {
             setState(() {
@@ -647,7 +651,7 @@ class _MainScreenState extends State<_MainScreen>
 
               // LiveKit handles all audio playback via PCM data channel
               // No need to manually trigger TTS here
-              
+
               // Refresh credits after message sent
               context.read<CreditsBloc>().add(const CreditsRefreshed());
             } else if (state is ChatError) {
@@ -1015,8 +1019,7 @@ class _MainScreenState extends State<_MainScreen>
                                   _showFollowUps = false;
                                   Future.delayed(
                                       const Duration(milliseconds: 50), () {
-                                    if (mounted &&
-                                        !_showUserMessageBubble) {
+                                    if (mounted && !_showUserMessageBubble) {
                                       setState(() {
                                         _showFollowUps = true;
                                       });
@@ -1378,8 +1381,60 @@ class _MainScreenState extends State<_MainScreen>
         }
       }
     } else {
-      // Start recording with internal audio only (no microphone needed!)
-      // _screenRecordingService.setAudioCaptureMode(internalOnly: true);
+      // Request microphone permission first
+      final micStatus = await Permission.microphone.status;
+      if (micStatus.isPermanentlyDenied || micStatus.isDenied) {
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+              ),
+              title: const Text('Microphone Permission',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              content: const Text(
+                'Microphone access is needed for recording audio.\n\n'
+                'Please enable it in Settings > Turiya > Microphone.',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child:
+                      Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Color(0xFF22C55E))),
+                ),
+              ],
+            ),
+          );
+          if (shouldOpenSettings == true) {
+            await openAppSettings();
+          }
+        }
+        return;
+      }
+      if (!micStatus.isGranted) {
+        // Request permission if not yet granted
+        final result = await Permission.microphone.request();
+        if (!result.isGranted) {
+          if (mounted) {
+            ToastUtils.showError(context, 'Microphone permission required');
+          }
+          return;
+        }
+      }
+
+      // Start recording
       bool started = await _screenRecordingService.startRecording();
 
       if (started) {
