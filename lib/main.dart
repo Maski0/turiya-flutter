@@ -2192,7 +2192,7 @@ class _MainScreenState extends State<_MainScreen>
     // Set pending state - will start recording when Krishna speaks
     setState(() {
       _pendingScreenRecording = true;
-      _recordingStatusMessage = 'Waiting for response...';
+      _recordingStatusMessage = 'Awaiting response';
     });
 
     if (mounted) {
@@ -2299,14 +2299,13 @@ class _MainScreenState extends State<_MainScreen>
       return const SizedBox.shrink();
     }
 
-    Color dotColor;
-    if (_pendingScreenRecording) {
-      dotColor = Colors.orange;
-    } else if (_isScreenRecording) {
-      dotColor = Colors.red;
-    } else {
-      dotColor = Colors.green;
+    Color dotColor = Colors.red; // Always red for pending and recording
+    if (!_pendingScreenRecording && !_isScreenRecording) {
+      dotColor = Colors.green; // Green only for saved
     }
+
+    // Blinking dot for pending state
+    final bool shouldBlink = _pendingScreenRecording;
 
     return GestureDetector(
       onTap: () {
@@ -2339,14 +2338,17 @@ class _MainScreenState extends State<_MainScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: dotColor,
-                shape: BoxShape.circle,
-              ),
-            ),
+            // Blinking red dot for pending, solid for others
+            shouldBlink
+                ? _BlinkingDot(color: dotColor)
+                : Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
             const SizedBox(width: 8),
             Text(
               _recordingStatusMessage,
@@ -2445,6 +2447,61 @@ class Route3 extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Blinking dot widget for pending recording state
+class _BlinkingDot extends StatefulWidget {
+  final Color color;
+
+  const _BlinkingDot({required this.color});
+
+  @override
+  State<_BlinkingDot> createState() => _BlinkingDotState();
+}
+
+class _BlinkingDotState extends State<_BlinkingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _animation.value,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: widget.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
     );
   }
 }
