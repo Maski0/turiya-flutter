@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:rive/rive.dart' hide Animation;
 import '../theme/onboarding_theme.dart';
 
 /// Unified animated splash screen - calming, meditative pace
@@ -302,24 +303,47 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
                       ),
                     ),
                   
-                  // ===== PHASE 3 & 4: TURIYA LOGO =====
+                  // ===== PHASE 3 & 4: TURIYA LOGO WITH FEATHER =====
                   if (_logoOpacity.value > 0.01)
                     Positioned(
                       left: 0,
                       right: 0,
-                      top: screenHeight * _logoPositionY.value - 70,
+                      top: screenHeight * _logoPositionY.value - 110,
                       child: Opacity(
                         opacity: _logoOpacity.value,
                         child: Transform.scale(
                           scale: _logoScale.value,
                           child: Center(
-                            child: SizedBox(
-                              width: 300,
-                              height: 140,
-                              child: SvgPicture.asset(
-                                'assets/images/onboarding/turiya_text_logo.svg',
-                                fit: BoxFit.contain,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Rive peacock feather animation
+                                SizedBox(
+                                  width: 48,
+                                  height: 64,
+                                  child: RiveWidgetBuilder(
+                                    fileLoader: FileLoader.fromAsset(
+                                      'assets/images/onboarding/feather.riv',
+                                      riveFactory: Factory.flutter,
+                                    ),
+                                    builder: (context, state) {
+                                      if (state is RiveLoaded) {
+                                        return RiveWidget(controller: state.controller);
+                                      }
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: 300,
+                                  height: 140,
+                                  child: SvgPicture.asset(
+                                    'assets/images/onboarding/turiya_text_logo.svg',
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

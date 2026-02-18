@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>To show Unity in AR</string>
+	<string>This app does not use the camera, but includes libraries that may reference camera APIs.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access to convert your speech to text</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

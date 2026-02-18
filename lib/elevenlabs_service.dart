@@ -68,12 +68,21 @@ class ElevenLabsService {
         try {
           final json = jsonDecode(trimmed) as Map<String, dynamic>;
           chunksParsed++;
+
+          // Check if backend returned an error
+          if (json.containsKey('error')) {
+            print('❌ TTS Backend Error: ${json['error']}');
+            // Don't yield error chunks - they have no audio
+            continue;
+          }
+
           print('📥 Parsed chunk $chunksParsed: ${json.keys}');
           final audioChunk = AudioChunk.fromJson(json);
           yield audioChunk;
         } catch (e) {
           print('⚠️ Failed to parse TTS chunk: $e');
-          print('⚠️ Line was: ${trimmed.substring(0, 100)}...');
+          print(
+              '⚠️ Line was: ${trimmed.length > 100 ? trimmed.substring(0, 100) : trimmed}...');
           // Continue processing other chunks
         }
       }
@@ -85,6 +94,13 @@ class ElevenLabsService {
     if (buffer.trim().isNotEmpty) {
       try {
         final json = jsonDecode(buffer.trim()) as Map<String, dynamic>;
+
+        // Check if backend returned an error
+        if (json.containsKey('error')) {
+          print('❌ TTS Backend Error (final): ${json['error']}');
+          return; // Don't yield error response
+        }
+
         final audioChunk = AudioChunk.fromJson(json);
         yield audioChunk;
       } catch (e) {

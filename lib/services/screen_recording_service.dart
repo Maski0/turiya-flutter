@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_screen_recording/flutter_screen_recording.dart';
+import 'package:screen_capture/screen_capture.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Service for managing native screen recording using iOS ReplayKit / Android MediaProjection
-/// This captures the actual screen content including platform views like Unity
-/// Note: Video only - iOS cannot capture app audio without a Broadcast Extension
+/// Service for managing native screen recording with system audio
+/// Uses screen_capture plugin which supports iOS system audio capture
 class ScreenRecordingService {
   static final ScreenRecordingService _instance =
       ScreenRecordingService._internal();
@@ -30,7 +29,7 @@ class ScreenRecordingService {
   }
 
   void setAudioCaptureMode({required bool internalOnly}) {
-    // Not used - video only recording
+    // Not used - screen_capture handles system audio automatically
   }
 
   /// Set processing update callback for UI progress indicator
@@ -40,7 +39,7 @@ class ScreenRecordingService {
 
   /// Capture audio chunk - kept for API compatibility
   void captureAudioChunk(String base64AudioChunk) {
-    // Not used - video only recording
+    // Not used - screen_capture handles audio capture internally
   }
 
   /// Get documents directory for saving recordings
@@ -53,7 +52,7 @@ class ScreenRecordingService {
     return recordingsDir;
   }
 
-  /// Start native screen recording (video only)
+  /// Start native screen recording with system audio
   Future<bool> startRecording() async {
     if (_isRecording) {
       debugPrint('⚠️ Already recording');
@@ -61,25 +60,29 @@ class ScreenRecordingService {
     }
 
     try {
-      debugPrint('🎬 Starting native screen recording (video only)...');
+      debugPrint('🎬 Starting screen recording...');
 
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final videoName = 'turiya_recording_$timestamp';
+      final result = await FlutterScreenCapture.startRecording();
+      debugPrint('🎬 startRecording result: $result');
 
-      final started = await FlutterScreenRecording.startRecordScreen(videoName);
-      debugPrint('🎬 startRecordScreen returned: $started');
-
-      if (started) {
+      if (result.contains('started') || result.contains('Recording')) {
         _isRecording = true;
-        debugPrint('✅ Native screen recording started');
+        debugPrint('✅ Screen recording started');
         return true;
+      } else {
+        debugPrint('❌ Unexpected result: $result');
+        return false;
       }
-
-      debugPrint('❌ Failed to start native recording');
-      return false;
     } catch (e, stack) {
       debugPrint('❌ Error starting screen recording: $e');
       debugPrint('Stack trace: $stack');
+      // Check for specific errors
+      final errorStr = e.toString();
+      if (errorStr.contains('USER_DENIED')) {
+        debugPrint('❌ User denied screen recording permission');
+      } else if (errorStr.contains('UNAVAILABLE')) {
+        debugPrint('❌ Screen recording not available on this device');
+      }
       return false;
     }
   }
@@ -103,17 +106,17 @@ class ScreenRecordingService {
     }
 
     try {
-      debugPrint('🛑 Stopping native screen recording...');
+      debugPrint('🛑 Stopping screen recording...');
       _safeProcessingUpdate('Saving...');
 
-      final path = await FlutterScreenRecording.stopRecordScreen;
+      final path = await FlutterScreenCapture.stopRecording();
 
       _isRecording = false;
 
       if (path.isNotEmpty) {
         _lastRecordingPath = path;
         _safeProcessingUpdate('Saved!');
-        debugPrint('✅ Recording saved: $path');
+        debugPrint('✅ Recording saved with system audio: $path');
         return path;
       } else {
         _safeProcessingUpdate('Failed');

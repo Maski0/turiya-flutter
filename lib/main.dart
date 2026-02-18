@@ -8,7 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_embed_unity/flutter_embed_unity.dart';
+import 'unity_stub.dart'; // Temporarily replaces flutter_embed_unity for simulator testing
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,15 +22,19 @@ import 'services/cache_service.dart';
 import 'models/cached_message.dart';
 import 'models/alignment_data.dart';
 import 'widgets/login_modal.dart';
+import 'widgets/pricing_bottom_sheet.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/profile_menu.dart';
 import 'widgets/recording_indicator.dart';
 import 'widgets/recording_preview_overlay.dart';
 import 'widgets/icons/hamburger_icon.dart';
 import 'widgets/icons/right_arrow_icon.dart';
-import 'widgets/bottom_input_bar.dart';
+import 'screens/home_screen.dart';
+import 'widgets/home_bottom_input.dart';
 import 'widgets/main_menu.dart';
 import 'widgets/profile_avatar_widget.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_liquid_glass_plus/flutter_liquid_glass.dart';
 import 'services/screen_recording_service.dart';
 import 'blocs/auth/auth_bloc_export.dart';
 import 'blocs/chat/chat_bloc_export.dart';
@@ -102,10 +106,8 @@ class ExampleApp extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        // Respect system text scaling for accessibility
         builder: (context, child) {
           return MediaQuery(
-            // Limit text scale factor to prevent breaking UI
             data: MediaQuery.of(context).copyWith(
               textScaleFactor:
                   MediaQuery.of(context).textScaleFactor.clamp(0.8, 1.3),
@@ -115,9 +117,12 @@ class ExampleApp extends StatelessWidget {
         },
         home: const _AppInitializer(
           child: OnboardingGate(
-            child: _MainScreen(),
+            child: HomeScreen(),
           ),
         ),
+        routes: {
+          '/chat': (context) => const _ChatScreenRoute(),
+        },
       ),
     );
   }
@@ -153,6 +158,14 @@ class _AppInitializerState extends State<_AppInitializer> {
   }
 }
 
+/// Public route wrapper for the chat screen
+class _ChatScreenRoute extends StatelessWidget {
+  const _ChatScreenRoute();
+
+  @override
+  Widget build(BuildContext context) => const _MainScreen();
+}
+
 class _MainScreen extends StatefulWidget {
   const _MainScreen();
 
@@ -169,6 +182,9 @@ class _MainScreenState extends State<_MainScreen>
   late AudioStreamer _audioStreamer;
   late stt.SpeechToText _speechToText;
 
+  // Audio session channel for iOS - ensures audio plays even when silent switch is on
+  static const _audioSessionChannel = MethodChannel('com.turiya/audio_session');
+
   // LiveKit for real-time voice (default for voice mode)
   final LiveKitService _liveKitService = LiveKitService();
   bool _isLiveKitConnected = false;
@@ -180,6 +196,7 @@ class _MainScreenState extends State<_MainScreen>
 
   bool _isGenerating = false;
   bool _showLoginModal = false;
+  bool _showPricingModal = false;
   bool _showChatSidebar = false;
   bool _showMenuDrawer = false;
   bool _showMainMenu = false;
@@ -273,11 +290,24 @@ class _MainScreenState extends State<_MainScreen>
   /// Load credits if user is already authenticated (handles post-onboarding case)
   void _loadCreditsIfAuthenticated() {
     final authState = context.read<AuthBloc>().state;
+    print('🔍 _loadCreditsIfAuthenticated: authState = ${authState.runtimeType}');
     if (authState is AuthAuthenticated) {
-      // User is already authenticated, load credits
+      print('✅ User authenticated in postFrameCallback, loading thread...');
       context.read<CreditsBloc>().add(const CreditsRequested());
-      // Also load last conversation
       _loadLastThread();
+    } else {
+      print('⏳ Auth not ready yet, subscribing for auth changes...');
+      // Auth might not be ready yet - listen for the next state change
+      final subscription = context.read<AuthBloc>().stream.firstWhere(
+        (state) => state is AuthAuthenticated,
+      );
+      subscription.then((state) {
+        if (mounted && state is AuthAuthenticated) {
+          print('✅ Auth became ready (via stream), loading thread...');
+          context.read<CreditsBloc>().add(const CreditsRequested());
+          _loadLastThread();
+        }
+      }).catchError((_) {});
     }
   }
 
@@ -580,14 +610,11 @@ class _MainScreenState extends State<_MainScreen>
       }
 
       print('👤 User ID: ${user.id}');
-      const avatarId =
-          '12a65bd0-d264-479d-a5a4-ce0bdabdbcf9'; // Sai Baba's avatar ID
 
       final response = await supabase.Supabase.instance.client
           .from('threads')
           .select('id')
           .eq('user_id', user.id)
-          .eq('avatar_id', avatarId)
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -633,6 +660,28 @@ class _MainScreenState extends State<_MainScreen>
       // Open: show first, then animate in
       setState(() {
         _showLoginModal = true;
+      });
+      _animationController.forward();
+    }
+  }
+
+  void _togglePricingModal() {
+    if (_showPricingModal) {
+      // Close: animate out first, then hide
+      _animationController.reverse().then((_) {
+        if (mounted) {
+          setState(() {
+            _showPricingModal = false;
+          });
+        }
+      });
+    } else {
+      // Dismiss keyboard before showing modal
+      FocusManager.instance.primaryFocus?.unfocus();
+
+      // Open: show first, then animate in
+      setState(() {
+        _showPricingModal = true;
       });
       _animationController.forward();
     }
@@ -761,7 +810,7 @@ class _MainScreenState extends State<_MainScreen>
                                             child: Text(
                                               'Cancel',
                                               textAlign: TextAlign.center,
-                                              style: AppTheme.title(context),
+                                              style: AppTheme.headingS(context),
                                             ),
                                           ),
                                         ),
@@ -793,7 +842,7 @@ class _MainScreenState extends State<_MainScreen>
                                             child: Text(
                                               'Exit',
                                               textAlign: TextAlign.center,
-                                              style: AppTheme.title(context)
+                                              style: AppTheme.headingS(context)
                                                   .copyWith(
                                                 fontWeight: FontWeight.w700,
                                               ),
@@ -841,6 +890,13 @@ class _MainScreenState extends State<_MainScreen>
               // Load user data
               context.read<CreditsBloc>().add(const CreditsRequested());
 
+              // Show pricing modal after a delay - ALWAYS for testing
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (mounted) {
+                  _togglePricingModal(); // TODO: Remove - always show for testing
+                }
+              });
+
               // Load last conversation
               _loadLastThread();
             } else if (state is AuthUnauthenticated) {
@@ -871,12 +927,6 @@ class _MainScreenState extends State<_MainScreen>
                 });
               }
 
-              // Close chat sidebar if open
-              if (_showChatSidebar) {
-                setState(() {
-                  _showChatSidebar = false;
-                });
-              }
             } else if (state is AuthError) {
               // Show error message
               ToastUtils.showError(
@@ -973,6 +1023,17 @@ class _MainScreenState extends State<_MainScreen>
                       // Start pending recording BEFORE audio plays (await it!)
                       if (_pendingScreenRecording) {
                         await _startPendingRecording();
+                      }
+                    }
+
+                    // Force iOS audio session to playback mode (ignores silent switch)
+                    if (Platform.isIOS) {
+                      try {
+                        await _audioSessionChannel
+                            .invokeMethod('forcePlaybackMode');
+                        print('🔊 Forced iOS audio to playback mode');
+                      } catch (e) {
+                        print('⚠️ Audio session force failed: $e');
                       }
                     }
 
@@ -1182,16 +1243,25 @@ class _MainScreenState extends State<_MainScreen>
             return;
           }
 
-          // Priority 4: Close chat sidebar if open
+          // Priority 4: Close pricing modal if open
+          if (_showPricingModal) {
+            _togglePricingModal();
+            return;
+          }
+
+          // Priority 5: Close chat sidebar if open
           if (_showChatSidebar) {
-            setState(() {
-              _showChatSidebar = false;
+            _chipAutoHideTimer?.cancel();
+            _animationController.reverse().then((_) {
+              setState(() {
+                _showChatSidebar = false;
+              });
             });
             return;
           }
 
-          // Priority 5: Show exit confirmation dialog
-          _showExitConfirmationDialog();
+          // Priority 6: Go back to home screen
+          Navigator.of(context).pop();
         },
         child: Scaffold(
           backgroundColor: Colors.black,
@@ -1208,11 +1278,60 @@ class _MainScreenState extends State<_MainScreen>
                   },
             child: Stack(
               children: [
-                // Layer 1: Unity (always visible)
+                // Layer 1: Krishna Background with gradient overlay
                 Positioned.fill(
-                  child: RepaintBoundary(
-                    key: _repaintBoundaryKey,
-                    child: const EmbedUnity(),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFF004459), // Light teal at top
+                          Color(0xFF00263B), // Dark teal at bottom
+                        ],
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Krishna home background image
+                        Positioned.fill(
+                          child: Image.asset(
+                            'assets/images/krishna_homepage.png',
+                            fit: BoxFit.cover,
+                            alignment: Alignment.topCenter,
+                            errorBuilder: (_, __, ___) => Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xFF004459),
+                                    Color(0xFF00263B),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Gradient overlay
+                        Positioned.fill(
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Color(
+                                      0x66000000), // Semi-transparent black at bottom
+                                ],
+                                stops: [0.5, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -1224,496 +1343,356 @@ class _MainScreenState extends State<_MainScreen>
                   curve: Curves.easeInOut,
                   child: IgnorePointer(
                     ignoring: _hideEverything,
-                    child: Stack(
-                      children: [
-                        // Chat Sidebar
-                        if (_showChatSidebar)
-                          Positioned.fill(
-                            child: FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: BackdropFilter(
-                                filter:
-                                    ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-                                child: ChatSidebar(
-                                  scrollController: _scrollController,
-                                  onClose: () {
-                                    _chipAutoHideTimer?.cancel();
-                                    _animationController.reverse().then((_) {
-                                      setState(() => _showChatSidebar = false);
-                                    });
-                                  },
-                                  onFollowUpTap: (question) {
-                                    _textController.text = question;
-                                    _sendMessage(question, context);
-                                  },
-                                  onLoginTap: _toggleLoginModal,
-                                  messageController: _textController,
-                                  onSendMessage: () {
-                                    final text = _textController.text.trim();
-                                    if (text.isNotEmpty) {
-                                      _sendMessage(text, context);
-                                    }
-                                  },
-                                  isRecording: _isRecording,
-                                  isAudioPlaying: _isAudioPlaying,
-                                  onMicTap: _toggleListening,
-                                  onStopAudio: _stopAudio,
-                                  // Adjust bottom padding for keyboard
-                                  bottomPadding: keyboardHeight + 90,
+                    child: LiquidGlassLayer(
+                      child: Stack(
+                        children: [
+                          // Chat Sidebar
+                          if (_showChatSidebar)
+                            Positioned.fill(
+                              child: FadeTransition(
+                                opacity: _fadeAnimation,
+                                child: BackdropFilter(
+                                  filter:
+                                      ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                                  child: ChatSidebar(
+                                    scrollController: _scrollController,
+                                    onClose: () {
+                                      _chipAutoHideTimer?.cancel();
+                                      _animationController.reverse().then((_) {
+                                        setState(
+                                            () => _showChatSidebar = false);
+                                      });
+                                    },
+                                    onFollowUpTap: (question) {
+                                      _textController.text = question;
+                                      _sendMessage(question, context);
+                                    },
+                                    onLoginTap: _toggleLoginModal,
+                                    messageController: _textController,
+                                    onSendMessage: () {
+                                      final text = _textController.text.trim();
+                                      if (text.isNotEmpty) {
+                                        _sendMessage(text, context);
+                                      }
+                                    },
+                                    isRecording: _isRecording,
+                                    isAudioPlaying: _isAudioPlaying,
+                                    onMicTap: _toggleListening,
+                                    onStopAudio: _stopAudio,
+                                    // Adjust bottom padding for keyboard
+                                    bottomPadding: keyboardHeight + 90,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
 
-                        // Top bar with menu and login
-                        // Hide when menu drawer is open
-                        if (!_showMenuDrawer)
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            child: SafeArea(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 16),
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Top left button - Hamburger menu OR Close button when chat is open
-                                        // Hide during screen recording
-                                        if (!_isScreenRecording)
-                                          GestureDetector(
-                                            onTap: () {
-                                              if (_showChatSidebar) {
-                                                // Close chat sidebar
-                                                _chipAutoHideTimer?.cancel();
-                                                _animationController
-                                                    .reverse()
-                                                    .then((_) {
-                                                  setState(() {
-                                                    _showChatSidebar = false;
+                          // Top bar - Hide when menu drawer is open
+                          if (!_showMenuDrawer)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: SafeArea(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          // Left: back/close button
+                                          if (!_isScreenRecording)
+                                            GestureDetector(
+                                              onTap: () {
+                                                if (_showChatSidebar) {
+                                                  _chipAutoHideTimer?.cancel();
+                                                  _animationController
+                                                      .reverse()
+                                                      .then((_) {
+                                                    setState(() {
+                                                      _showChatSidebar = false;
+                                                    });
                                                   });
-                                                });
-                                              } else {
-                                                // Toggle main menu
-                                                setState(() {
-                                                  _showMainMenu =
-                                                      !_showMainMenu;
-                                                });
-                                              }
-                                            },
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                              child: BackdropFilter(
-                                                filter: ImageFilter.blur(
-                                                    sigmaX: 12, sigmaY: 12),
-                                                child: Container(
-                                                  width: 48,
-                                                  height: 48,
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        const Color(0x1AFFFFFF),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            16),
-                                                    border: Border.all(
-                                                      color: const Color(
-                                                          0x33FFFFFF),
-                                                      width: 1,
-                                                    ),
-                                                  ),
-                                                  child: Center(
-                                                    // Show close icon when chat is open, hamburger otherwise
-                                                    child: _showChatSidebar
-                                                        ? const Icon(
-                                                            Icons.close,
-                                                            color: Colors.white,
-                                                            size: 24,
-                                                          )
-                                                        : const HamburgerIcon(
-                                                            size: 24),
+                                                } else {
+                                                  Navigator.of(context).pop();
+                                                }
+                                              },
+                                              child: Container(
+                                                width: 40,
+                                                height: 40,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.transparent,
+                                                  borderRadius:
+                                                      BorderRadius.circular(24),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                        0x1AFFFFFF),
+                                                    width: 1,
                                                   ),
                                                 ),
+                                                child: Center(
+                                                  child: _showChatSidebar
+                                                      ? const Icon(
+                                                          Icons.close,
+                                                          color: Colors.white,
+                                                          size: 24,
+                                                        )
+                                                      : const Icon(
+                                                          Icons
+                                                              .arrow_back_ios_new,
+                                                          color: Colors.white,
+                                                          size: 20,
+                                                        ),
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            const SizedBox(width: 40),
+
+                                          // Turiya logo: left-aligned on home, centered on chat
+                                          Container(
+                                            height: 46,
+                                            child: SvgPicture.asset(
+                                              'assets/images/onboarding/turiya_text_logo.svg',
+                                              height: 46,
+                                              colorFilter:
+                                                  const ColorFilter.mode(
+                                                Colors.white,
+                                                BlendMode.srcIn,
+                                              ),
+                                              placeholderBuilder: (_) => Text(
+                                                'Turiya',
+                                                style:
+                                                    AppTheme.headingM(context)
+                                                        .copyWith(
+                                                            color:
+                                                                Colors.white),
                                               ),
                                             ),
-                                          )
-                                        else
-                                          const SizedBox(
-                                              width:
-                                                  48), // Placeholder to maintain spacing
+                                          ),
 
-                                        // Spacer to push profile to the right
-                                        const Spacer(),
-
-                                        // Right side - Profile on top, Record button below (right-aligned column)
-                                        BlocBuilder<AuthBloc, AuthState>(
-                                          builder: (context, state) {
-                                            if (state is AuthAuthenticated &&
-                                                !_isScreenRecording) {
-                                              return Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.end,
-                                                children: [
-                                                  _buildCreditsAndProfile(
-                                                      context),
-                                                  const SizedBox(height: 12),
-                                                  _buildRecordButton(),
-                                                ],
-                                              );
-                                            }
-                                            if (_isScreenRecording) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            // Web: auth-glass-btn styling
-                                            // padding: 10px 12px, borderRadius: 16px,
-                                            // background: rgba(255, 255, 255, 0.01),
-                                            // border: 1px solid rgba(255, 255, 255, 0.08), blur: 16px
-                                            return GestureDetector(
-                                              onTap: _toggleLoginModal,
-                                              child: ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                child: BackdropFilter(
-                                                  filter: ImageFilter.blur(
-                                                      sigmaX: 16, sigmaY: 16),
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      left: 18,
-                                                      right: 16,
-                                                      top: 12,
-                                                      bottom: 12,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      // Web: rgba(255, 255, 255, 0.01)
-                                                      color: const Color(
-                                                          0x03FFFFFF),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              16),
-                                                      border: Border.all(
-                                                        // Web: rgba(255, 255, 255, 0.08)
-                                                        color: const Color(
-                                                            0x14FFFFFF),
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        // Web: RightArrow icon with mr-1 (14x21)
-                                                        const RightArrowIcon(
-                                                          size: 14,
-                                                          color: Colors.white,
-                                                        ),
-                                                        // Spacing between icon and text
-                                                        const SizedBox(
-                                                            width: 8),
-                                                        // Web: font-medium text-xl (20px) but using 18px for mobile
-                                                        // Use theme: titleLarge (18px)
-                                                        Text(
-                                                          'Login',
-                                                          style:
-                                                              Theme.of(context)
-                                                                  .textTheme
-                                                                  .titleLarge!
-                                                                  .copyWith(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                  ),
-                                                        ),
+                                          // Right: Profile avatar or login button
+                                          _buildHeaderProfileAvatar(context),
+                                        ],
+                                      ),
+                                      // "Hide everything" button - only shown when env var is set
+                                      if (dotenv.env['SHOW_HIDE_OPTION'] ==
+                                          'true')
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 12),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              GestureDetector(
+                                                onTap: () => setState(() =>
+                                                    _hideEverything = true),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 10,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      colors: [
+                                                        Colors.white
+                                                            .withOpacity(0.18),
+                                                        Colors.white
+                                                            .withOpacity(0.10),
                                                       ],
                                                     ),
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                    // Recording button - appears below profile avatar when authenticated
-                                    // Hidden when recording is active or when chat sidebar is open
-                                    // Fades in with profile avatar
-                                    if (!_showChatSidebar)
-                                      BlocBuilder<AuthBloc, AuthState>(
-                                        builder: (context, authState) {
-                                          if (authState is AuthAuthenticated &&
-                                              !_isScreenRecording) {
-                                            // Wait for credits to load before showing (matches profile fade)
-                                            return BlocBuilder<CreditsBloc,
-                                                CreditsState>(
-                                              builder: (context, creditsState) {
-                                                if (creditsState
-                                                    is! CreditsLoaded) {
-                                                  return const SizedBox
-                                                      .shrink();
-                                                }
-                                                return TweenAnimationBuilder<
-                                                    double>(
-                                                  tween: Tween(
-                                                      begin: 0.0, end: 1.0),
-                                                  duration: const Duration(
-                                                      milliseconds: 400),
-                                                  curve: Curves.easeIn,
-                                                  builder: (context, opacity,
-                                                      child) {
-                                                    return Opacity(
-                                                      opacity: opacity,
-                                                      child: child,
-                                                    );
-                                                  },
-                                                  child:
-                                                      const SizedBox.shrink(),
-                                                );
-                                              },
-                                            );
-                                          }
-                                          return const SizedBox.shrink();
-                                        },
-                                      ),
-                                    // "Hide everything" button - only shown when env var is set
-                                    if (dotenv.env['SHOW_HIDE_OPTION'] ==
-                                        'true')
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.end,
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () => setState(
-                                                  () => _hideEverything = true),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 16,
-                                                  vertical: 10,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    colors: [
-                                                      Colors.white
-                                                          .withOpacity(0.18),
-                                                      Colors.white
-                                                          .withOpacity(0.10),
-                                                    ],
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(13),
-                                                  border: Border.all(
-                                                    color: Colors.white
-                                                        .withOpacity(0.32),
-                                                    width: 1.2,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.visibility_off,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            13),
+                                                    border: Border.all(
                                                       color: Colors.white
-                                                          .withOpacity(0.9),
-                                                      size: 18,
+                                                          .withOpacity(0.32),
+                                                      width: 1.2,
                                                     ),
-                                                    const SizedBox(width: 8),
-                                                    Text(
-                                                      'Hide UI',
-                                                      style: TextStyle(
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.visibility_off,
                                                         color: Colors.white
                                                             .withOpacity(0.9),
-                                                        fontSize: 13,
-                                                        fontWeight:
-                                                            FontWeight.w500,
+                                                        size: 18,
                                                       ),
-                                                    ),
-                                                  ],
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        'Hide UI',
+                                                        style: TextStyle(
+                                                          color: Colors.white
+                                                              .withOpacity(0.9),
+                                                          fontSize: 13,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          // Bottom center - Disclaimer
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: SafeArea(
+                              bottom: true,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Builder(
+                                  builder: (context) {
+                                    // Show disclaimer when not generating/playing
+                                    final baseStyle = Theme.of(context)
+                                        .textTheme
+                                        .bodySmall!
+                                        .copyWith(
+                                          color: const Color(0x80FFFFFF),
+                                          height: 1.25,
+                                        );
+                                    return RichText(
+                                      textAlign: TextAlign.center,
+                                      text: TextSpan(
+                                        style: baseStyle,
+                                        children: [
+                                          const TextSpan(
+                                            text: 'Turiya',
+                                            style: TextStyle(
+                                                fontStyle: FontStyle.italic),
+                                          ),
+                                          const TextSpan(
+                                              text: ' can make mistakes. '),
+                                          TextSpan(
+                                            text: 'Check disclaimer.',
+                                            style: const TextStyle(
+                                              decoration:
+                                                  TextDecoration.underline,
+                                              decorationColor:
+                                                  Color(0x80FFFFFF),
+                                            ),
+                                            recognizer: TapGestureRecognizer()
+                                              ..onTap = () async {
+                                                final url = Uri.parse(
+                                                  'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
+                                                );
+                                                if (await canLaunchUrl(url)) {
+                                                  await launchUrl(url,
+                                                      mode: LaunchMode
+                                                          .externalApplication);
+                                                }
+                                              },
+                                          ),
+                                        ],
                                       ),
-                                  ],
+                                    );
+                                  },
                                 ),
                               ),
                             ),
                           ),
 
-                        // Bottom center - Disclaimer (hide when generating/playing/chat/menu open)
-                        // Hide when chat sidebar or menu drawer is open
-
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: SafeArea(
-                            bottom: true,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Builder(
-                                builder: (context) {
-                                  // Show disclaimer when not generating/playing
-                                  final baseStyle = Theme.of(context)
-                                      .textTheme
-                                      .bodySmall!
-                                      .copyWith(
-                                        color: const Color(0x80FFFFFF),
-                                        height: 1.25,
-                                      );
-                                  return RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: baseStyle,
-                                      children: [
-                                        const TextSpan(
-                                          text: 'Turiya',
-                                          style: TextStyle(
-                                              fontStyle: FontStyle.italic),
-                                        ),
-                                        const TextSpan(
-                                            text: ' can make mistakes. '),
-                                        TextSpan(
-                                          text: 'Check disclaimer.',
-                                          style: const TextStyle(
-                                            decoration:
-                                                TextDecoration.underline,
-                                            decorationColor: Color(0x80FFFFFF),
-                                          ),
-                                          recognizer: TapGestureRecognizer()
-                                            ..onTap = () async {
-                                              final url = Uri.parse(
-                                                'https://walnut-tin-527.notion.site/Disclaimer-2508bdb5861080ffbf5ec151d011e10d?source=copy_link',
-                                              );
-                                              if (await canLaunchUrl(url)) {
-                                                await launchUrl(url,
-                                                    mode: LaunchMode
-                                                        .externalApplication);
-                                              }
-                                            },
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
+                          // Main Menu (About, FAQs, Blog, Contact)
+                          MainMenu(
+                            isOpen: _showMainMenu,
+                            onClose: () {
+                              setState(() {
+                                _showMainMenu = false;
+                              });
+                            },
                           ),
-                        ),
 
-                        // Main Menu (About, FAQs, Blog, Contact)
-                        MainMenu(
-                          isOpen: _showMainMenu,
-                          onClose: () {
-                            setState(() {
-                              _showMainMenu = false;
-                            });
-                          },
-                        ),
-
-                        // Bottom Input Bar with Liquid Glass
-                        Positioned(
-                          left: 16,
-                          right: 16,
-                          bottom: keyboardHeight,
-                          child: SafeArea(
-                            bottom: true,
-                            child: Padding(
-                              // Consistent bottom margin to avoid UI shift during connection
-                              padding: const EdgeInsets.only(bottom: 28),
-                              child: BottomInputBar(
-                                textController: _textController,
-                                focusNode: _textFocusNode,
-                                isGenerating: _isGenerating,
-                                isRecording: _isRecording,
-                                isAudioPlaying: _isAudioPlaying,
-                                onSubmit: (text) => _sendMessage(text, context),
-                                onMicTap: _toggleListening,
-                                onStopAudio: _stopAudio,
-                                enabled: !_showLoginModal,
-                                // LiveKit voice mode
-                                isLiveKitConnected: _isLiveKitConnected,
-                                isLiveKitConnecting: _isLiveKitConnecting ||
-                                    _isLiveKitDisconnecting,
-                                onVoiceCallTap: _connectToLiveKit,
-                                onDisconnectLiveKit: _disconnectFromLiveKit,
-                                onSettingsTap: () {
-                                  setState(() {
-                                    _showMenuDrawer = true;
-                                  });
-                                  _animationController.forward();
-                                },
-                                isMicMuted:
-                                    !_liveKitService.isMicrophoneEnabled,
-                                onMicToggle: () async {
-                                  await _liveKitService.toggleMicrophone();
-                                  setState(() {});
-                                },
-                                // Chat button & pondering chip
-                                showChatButton: !_showChatSidebar,
-                                hidePonderingChip: _showChatSidebar,
-                                onChatButtonTap: () {
+                          // Bottom input bar - shared across both views
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                            child: HomeBottomSection(
+                              textController: _textController,
+                              focusNode: _textFocusNode,
+                              isGenerating: _isGenerating,
+                              isRecording: _isRecording,
+                              isAudioPlaying: _isAudioPlaying,
+                              onSubmit: (text) => _sendMessage(text, context),
+                              onMicTap: _toggleListening,
+                              onMicLongPress: () {},
+                              onStopAudio: _stopAudio,
+                              enabled: !_showLoginModal,
+                              isLiveKitConnected: _isLiveKitConnected,
+                              isLiveKitConnecting: _isLiveKitConnecting,
+                              onVoiceCallTap: _connectToLiveKit,
+                              onCameraTap: () {
+                                if (!_showChatSidebar) {
                                   setState(() {
                                     _showChatSidebar = true;
                                     _showChip = false;
                                   });
                                   _animationController.forward();
-                                  Future.delayed(
-                                      const Duration(milliseconds: 100), () {
-                                    if (mounted && _showChatSidebar) {
-                                      setState(() => _showChip = true);
-                                      _startChipAutoHideTimer();
-                                    }
+                                }
+                              },
+                              onSuggestionTap: (text) => _sendMessage(text, context),
+                              showSuggestions: !_showChatSidebar,
+                            ),
+                          ),
+
+                          // Profile Menu - renders on top of everything
+                          if (_showMenuDrawer)
+                            FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: ProfileMenu(
+                                onClose: () {
+                                  _animationController.reverse().then((_) {
+                                    setState(() {
+                                      _showMenuDrawer = false;
+                                    });
                                   });
                                 },
                               ),
                             ),
-                          ),
-                        ),
 
-                        // Profile Menu - renders on top of everything
-                        if (_showMenuDrawer)
-                          FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: ProfileMenu(
-                              onClose: () {
-                                _animationController.reverse().then((_) {
-                                  setState(() {
-                                    _showMenuDrawer = false;
-                                  });
-                                });
-                              },
-                            ),
-                          ),
-
-                        // Login Modal Overlay - renders on top of everything
-                        if (_showLoginModal)
-                          FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: BlocBuilder<AuthBloc, AuthState>(
+                          // Login Modal Overlay - renders on top of everything
+                          if (_showLoginModal)
+                            BlocBuilder<AuthBloc, AuthState>(
                               builder: (context, state) {
                                 return LoginModal(
                                   onClose: _toggleLoginModal,
                                   onGoogleSignIn: _handleGoogleSignIn,
                                   isSigningIn: state is AuthLoading,
+                                  animation: _fadeAnimation,
                                 );
                               },
                             ),
-                          ),
-                      ], // Close inner Stack children (UI elements)
-                    ), // Close inner Stack
+
+                          // Pricing Modal Overlay - renders on top of everything
+                          if (_showPricingModal)
+                            PricingBottomSheet(
+                              onClose: _togglePricingModal,
+                              onUpgrade: () {
+                                // TODO: Handle upgrade success
+                                _togglePricingModal();
+                              },
+                            ),
+                        ], // Close inner Stack children (UI elements)
+                      ), // Close inner Stack
+                    ), // Close LiquidGlassLayer
                   ), // Close IgnorePointer
                 ), // Close AnimatedOpacity
 
@@ -2067,6 +2046,108 @@ class _MainScreenState extends State<_MainScreen>
     _recordingIndicatorOverlay = null;
   }
 
+  Widget _buildHeaderProfileAvatar(BuildContext context) {
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        if (state is AuthAuthenticated && !_isScreenRecording) {
+          final user = state.user;
+          final avatarUrl = user.userMetadata?['avatar_url'] as String?;
+          final fullName = user.userMetadata?['full_name'] as String? ??
+              user.userMetadata?['name'] as String? ??
+              user.email ??
+              '';
+          final initials = _getInitials(fullName);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _showMenuDrawer = true;
+              });
+              _animationController.forward();
+            },
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0x1AFFFFFF),
+                  width: 1,
+                ),
+              ),
+              child: ClipOval(
+                child: avatarUrl != null && avatarUrl.isNotEmpty
+                    ? Image.network(
+                        avatarUrl,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _buildInitialsAvatar(initials, 44),
+                      )
+                    : _buildInitialsAvatar(initials, 44),
+              ),
+            ),
+          );
+        }
+        if (_isScreenRecording) {
+          return const SizedBox(width: 44);
+        }
+        return GestureDetector(
+          onTap: _toggleLoginModal,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: const Color(0x1AFFFFFF),
+                width: 1,
+              ),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.person_outline,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _getInitials(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    final parts = trimmed.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return trimmed[0].toUpperCase();
+  }
+
+  Widget _buildInitialsAvatar(String initials, double size) {
+    return Container(
+      width: size,
+      height: size,
+      color: const Color(0xFF1A6B5C),
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.38,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCreditsAndProfile(BuildContext context) {
     final backgroundAudio = BackgroundAudioService();
 
@@ -2111,30 +2192,32 @@ class _MainScreenState extends State<_MainScreen>
               ),
             ),
             child: Center(
-              // Record icon: red filled circle with outer ring, blinks when recording
-              child: _isScreenRecording || _pendingScreenRecording
-                  ? _BlinkingRecordIcon()
-                  : Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.red,
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
+              // Record icon: yellow when pending, red when recording, blinks in both states
+              child: _isScreenRecording
+                  ? _BlinkingRecordIcon(color: Colors.red)
+                  : _pendingScreenRecording
+                      ? _BlinkingRecordIcon(color: Colors.amber)
+                      : Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.red,
+                              width: 2,
+                            ),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
             ),
           ),
         ),
@@ -2195,8 +2278,7 @@ class _MainScreenState extends State<_MainScreen>
                           const SizedBox(width: 8),
                           Text(
                             'Select Language',
-                            style: AppTheme.body(context).copyWith(
-                              fontSize: 16,
+                            style: AppTheme.bodyM(context).copyWith(
                               fontWeight: FontWeight.w600,
                               color: Colors.white.withOpacity(0.9),
                             ),
@@ -2264,8 +2346,7 @@ class _MainScreenState extends State<_MainScreen>
           children: [
             Text(
               displayName,
-              style: AppTheme.body(context).copyWith(
-                fontSize: 16,
+              style: AppTheme.bodyM(context).copyWith(
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 color: Colors.white.withOpacity(isSelected ? 1.0 : 0.7),
               ),
@@ -2658,6 +2739,7 @@ class _MainScreenState extends State<_MainScreen>
     _liveKitService.dispose(); // Clean up LiveKit
     super.dispose();
   }
+
 }
 
 class Route2 extends StatelessWidget {
@@ -2735,6 +2817,10 @@ class Route3 extends StatelessWidget {
 
 /// Blinking record icon for active/pending recording
 class _BlinkingRecordIcon extends StatefulWidget {
+  final Color color;
+
+  const _BlinkingRecordIcon({this.color = Colors.red});
+
   @override
   State<_BlinkingRecordIcon> createState() => _BlinkingRecordIconState();
 }
@@ -2776,7 +2862,7 @@ class _BlinkingRecordIconState extends State<_BlinkingRecordIcon>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.red,
+                color: widget.color,
                 width: 2,
               ),
             ),
@@ -2784,8 +2870,8 @@ class _BlinkingRecordIconState extends State<_BlinkingRecordIcon>
               child: Container(
                 width: 12,
                 height: 12,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
+                decoration: BoxDecoration(
+                  color: widget.color,
                   shape: BoxShape.circle,
                 ),
               ),

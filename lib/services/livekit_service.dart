@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:flutter_embed_unity/flutter_embed_unity.dart';
+import '../unity_stub.dart';  // Temporarily replaces flutter_embed_unity for simulator testing
 
 /// Agent state enum for UI updates
 enum AgentState {

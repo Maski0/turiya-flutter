@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter_embed_unity/flutter_embed_unity.dart';
+import 'unity_stub.dart';  // Temporarily replaces flutter_embed_unity for simulator testing
 import 'elevenlabs_service.dart';
 import 'models/alignment_data.dart';
 import 'services/screen_recording_service.dart';

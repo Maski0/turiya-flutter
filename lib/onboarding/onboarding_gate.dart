@@ -14,7 +14,8 @@ class OnboardingGate extends StatefulWidget {
 
 class _OnboardingGateState extends State<OnboardingGate> {
   bool _isLoading = true;
-  bool _hasCompletedOnboarding = false;
+  bool _hasCompletedOnboarding =
+      true; // TODO: Set back to false to enable onboarding
 
   @override
   void initState() {
@@ -23,6 +24,15 @@ class _OnboardingGateState extends State<OnboardingGate> {
   }
 
   Future<void> _checkOnboardingStatus() async {
+    // TODO: Remove this bypass to enable onboarding
+    if (mounted) {
+      setState(() {
+        _hasCompletedOnboarding = true;
+        _isLoading = false;
+      });
+    }
+    return;
+
     final prefs = await SharedPreferences.getInstance();
     final completed = prefs.getBool('onboarding_completed') ?? false;
 
