@@ -22,6 +22,7 @@ import 'services/cache_service.dart';
 import 'models/cached_message.dart';
 import 'models/alignment_data.dart';
 import 'widgets/login_modal.dart';
+import 'widgets/pricing/chat_pricing_bottom_sheet.dart';
 import 'widgets/pricing_bottom_sheet.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/profile_menu.dart';
@@ -94,6 +95,10 @@ Future<void> main() async {
 class ExampleApp extends StatelessWidget {
   const ExampleApp({super.key});
 
+  // Debug: start on chat screen so pricing overlay
+  // (forced in `_MainScreenState`) is visible after restarts.
+  static const bool _startOnChatForPricingTesting = false;
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
@@ -115,9 +120,11 @@ class ExampleApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: const _AppInitializer(
+        home: _AppInitializer(
           child: OnboardingGate(
-            child: HomeScreen(),
+            child: _startOnChatForPricingTesting
+                ? const _ChatScreenRoute()
+                : HomeScreen(),
           ),
         ),
         routes: {
@@ -175,6 +182,16 @@ class _MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<_MainScreen>
     with SingleTickerProviderStateMixin {
+  // Debug/test: keep pricing always visible on the chat screen.
+  static const bool _forcePricingOnChatForTesting = false;
+  // Debug/test: show the bigger/full pricing screen instead of chat bottom sheet.
+  static const bool _showFullPricingScreenForTesting = false;
+  // Debug/test: auto-open pricing shortly after chat screen appears.
+  static const bool _autoOpenPricingAfterEnterForTesting = true;
+  static const Duration _autoOpenPricingDelayForTesting =
+      Duration(milliseconds: 1200);
+
+  Timer? _autoOpenPricingTimer;
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFocusNode = FocusNode();
   final BackendApiService _backendApi = BackendApiService();
@@ -213,6 +230,7 @@ class _MainScreenState extends State<_MainScreen>
   static const int _maxRecordingDurationMinutes = 5; // Max 5 minutes
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late Animation<Offset> _pricingSheetSlideAnimation;
   String? _threadId; // Conversation thread ID
   String? _lastUserMessage; // Track last sent message
   bool _showUserMessageBubble = false; // Control user message bubble visibility
@@ -265,6 +283,23 @@ class _MainScreenState extends State<_MainScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
+    _pricingSheetSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+
+    if (_autoOpenPricingAfterEnterForTesting) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoOpenPricingTimer?.cancel();
+        _autoOpenPricingTimer = Timer(_autoOpenPricingDelayForTesting, () {
+          if (!mounted || _showPricingModal) return;
+          _togglePricingModal();
+        });
+      });
+    }
+
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
 
@@ -290,7 +325,8 @@ class _MainScreenState extends State<_MainScreen>
   /// Load credits if user is already authenticated (handles post-onboarding case)
   void _loadCreditsIfAuthenticated() {
     final authState = context.read<AuthBloc>().state;
-    print('🔍 _loadCreditsIfAuthenticated: authState = ${authState.runtimeType}');
+    print(
+        '🔍 _loadCreditsIfAuthenticated: authState = ${authState.runtimeType}');
     if (authState is AuthAuthenticated) {
       print('✅ User authenticated in postFrameCallback, loading thread...');
       context.read<CreditsBloc>().add(const CreditsRequested());
@@ -299,8 +335,8 @@ class _MainScreenState extends State<_MainScreen>
       print('⏳ Auth not ready yet, subscribing for auth changes...');
       // Auth might not be ready yet - listen for the next state change
       final subscription = context.read<AuthBloc>().stream.firstWhere(
-        (state) => state is AuthAuthenticated,
-      );
+            (state) => state is AuthAuthenticated,
+          );
       subscription.then((state) {
         if (mounted && state is AuthAuthenticated) {
           print('✅ Auth became ready (via stream), loading thread...');
@@ -926,7 +962,6 @@ class _MainScreenState extends State<_MainScreen>
                   }
                 });
               }
-
             } else if (state is AuthError) {
               // Show error message
               ToastUtils.showError(
@@ -1429,8 +1464,8 @@ class _MainScreenState extends State<_MainScreen>
                                                   borderRadius:
                                                       BorderRadius.circular(24),
                                                   border: Border.all(
-                                                    color: const Color(
-                                                        0x1AFFFFFF),
+                                                    color:
+                                                        const Color(0x1AFFFFFF),
                                                     width: 1,
                                                   ),
                                                 ),
@@ -1648,7 +1683,8 @@ class _MainScreenState extends State<_MainScreen>
                                   _animationController.forward();
                                 }
                               },
-                              onSuggestionTap: (text) => _sendMessage(text, context),
+                              onSuggestionTap: (text) =>
+                                  _sendMessage(text, context),
                               showSuggestions: !_showChatSidebar,
                             ),
                           ),
@@ -1682,14 +1718,48 @@ class _MainScreenState extends State<_MainScreen>
                             ),
 
                           // Pricing Modal Overlay - renders on top of everything
-                          if (_showPricingModal)
-                            PricingBottomSheet(
-                              onClose: _togglePricingModal,
-                              onUpgrade: () {
-                                // TODO: Handle upgrade success
-                                _togglePricingModal();
-                              },
-                            ),
+                          if (_forcePricingOnChatForTesting ||
+                              _showPricingModal)
+                            _showFullPricingScreenForTesting
+                                ? FadeTransition(
+                                    opacity: _forcePricingOnChatForTesting
+                                        ? const AlwaysStoppedAnimation(1.0)
+                                        : _fadeAnimation,
+                                    child: PricingBottomSheet(
+                                      onClose: _forcePricingOnChatForTesting
+                                          ? null
+                                          : _togglePricingModal,
+                                      onUpgrade: _forcePricingOnChatForTesting
+                                          ? null
+                                          : () {
+                                              // TODO: Handle upgrade success
+                                              _togglePricingModal();
+                                            },
+                                    ),
+                                  )
+                                : ChatPricingBottomSheet(
+                                    // Fade only the dim backdrop to avoid
+                                    // mid-animation "sooty" tint on liquid glass.
+                                    backdropOpacity:
+                                        _forcePricingOnChatForTesting
+                                            ? const AlwaysStoppedAnimation(1.0)
+                                            : _fadeAnimation,
+                                    sheetSlide: _forcePricingOnChatForTesting
+                                        ? const AlwaysStoppedAnimation(
+                                            Offset.zero,
+                                          )
+                                        : _pricingSheetSlideAnimation,
+                                    onClose: _forcePricingOnChatForTesting
+                                        ? null
+                                        : _togglePricingModal,
+                                    onPrimary: _forcePricingOnChatForTesting
+                                        ? null
+                                        : () {
+                                            // TODO: Handle upgrade success
+                                            _togglePricingModal();
+                                          },
+                                    onDayPass: () {},
+                                  ),
                         ], // Close inner Stack children (UI elements)
                       ), // Close inner Stack
                     ), // Close LiquidGlassLayer
@@ -2733,13 +2803,13 @@ class _MainScreenState extends State<_MainScreen>
     _textFocusNode.dispose();
     _scrollController.dispose();
     _animationController.dispose();
+    _autoOpenPricingTimer?.cancel();
     _chipAutoHideTimer?.cancel();
     _recordingAutoStopTimer?.cancel(); // Cancel recording auto-stop timer
     _removeRecordingIndicator();
     _liveKitService.dispose(); // Clean up LiveKit
     super.dispose();
   }
-
 }
 
 class Route2 extends StatelessWidget {

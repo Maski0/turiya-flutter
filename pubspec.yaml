@@ -103,6 +103,7 @@ flutter:
     - assets/images/pricing/feather.riv
     - assets/icons/
     - assets/audio/
+    - assets/images/night_bg/
 
   fonts:
     - family: Alegreya

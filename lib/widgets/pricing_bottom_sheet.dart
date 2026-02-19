@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_liquid_glass_plus/flutter_liquid_glass.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:rive/rive.dart' hide Animation;
 import '../theme/app_theme.dart';
+import 'pricing/pricing_styles.dart';
+import 'pricing/pricing_bottom_panel.dart';
 
 class PricingBottomSheet extends StatefulWidget {
   final VoidCallback? onClose;
@@ -18,13 +19,7 @@ class PricingBottomSheet extends StatefulWidget {
   State<PricingBottomSheet> createState() => _PricingBottomSheetState();
 }
 
-enum _PricingPlan { pro, max }
-
 class _PricingBottomSheetState extends State<PricingBottomSheet> {
-  _PricingPlan _selectedPlan = _PricingPlan.max;
-
-  static const _bgTop = Color(0xFF004459);
-  static const _bgBot = Color(0xFF00263B);
   static const _w = Colors.white;
 
   @override
@@ -35,15 +30,15 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
     final h = mq.size.height;
     final scale = h / 812.0;
     final krishnaH = 380.0 * scale;
+    final bgGradient = kPricingDaytime
+        ? kPricingDayBackgroundGradient
+        : kPricingNightBackgroundGradient;
+    final krishnaFadeGradient = kPricingDaytime
+        ? kPricingDayKrishnaFadeGradient
+        : kPricingNightKrishnaFadeGradient;
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_bgTop, _bgTop, _bgTop, _bgBot],
-        ),
-      ),
+      decoration: BoxDecoration(gradient: bgGradient),
       child: Stack(
         children: [
           // ── Layer 0: Scrollable background ──
@@ -71,20 +66,9 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
                         right: 0,
                         bottom: -60,
                         height: krishnaH * 0.6 + 60,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              stops: [0.0, 0.45, 0.8, 1.0],
-                              colors: [
-                                Color(0x00004459),
-                                Color(0xAA004459),
-                                _bgTop,
-                                _bgTop,
-                              ],
-                            ),
-                          ),
+                        child: DecoratedBox(
+                          decoration:
+                              BoxDecoration(gradient: krishnaFadeGradient),
                         ),
                       ),
                     ],
@@ -120,9 +104,15 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
                       ),
                       _title(),
                       const SizedBox(height: 30),
-                      _subtitle(),
-                      const SizedBox(height: 16),
-                      _features(),
+                      _descriptionSectionBackground(
+                        child: Column(
+                          children: [
+                            _subtitle(),
+                            const SizedBox(height: 16),
+                            _features(),
+                          ],
+                        ),
+                      ),
                       // Extra bottom space so content can scroll behind the sticky card
                       SizedBox(height: 200 * scale),
                     ],
@@ -137,72 +127,73 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
             left: 16,
             right: 16,
             bottom: botPad - 5,
-            child: _stickyPricingCard(),
+            child: PricingBottomPanel(
+              primaryLabel: 'Continue',
+              onPrimary: widget.onUpgrade,
+              onDayPass: () {},
+            ),
           ),
 
           // ── Layer 2: Close button ──
-          Positioned(
-            top: topPad + 8,
-            right: 16,
-            child: GestureDetector(
-              onTap: widget.onClose,
-              behavior: HitTestBehavior.opaque,
-              child: const Padding(
-                padding: EdgeInsets.all(8),
-                child: Icon(Icons.close, color: _w, size: 22),
+          if (widget.onClose != null)
+            Positioned(
+              top: topPad + 8,
+              right: 16,
+              child: GestureDetector(
+                onTap: widget.onClose,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: SvgPicture.asset(
+                      'assets/images/pricing/close_icon.svg',
+                      colorFilter: const ColorFilter.mode(_w, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  // ─── Sticky pricing card with liquid glass ──────────────────────
-  Widget _stickyPricingCard() {
-    return LGContainer(
-      useOwnLayer: true,
-      quality: LGQuality.premium,
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      settings: const LiquidGlassSettings(
-        thickness: 30,
-        blur: 8,
-        refractiveIndex: 1.15,
-        chromaticAberration: 0.005,
-        lightIntensity: 0.5,
-        glassColor: Color.fromARGB(25, 255, 255, 255),
-        saturation: 1.3,
+  Widget _descriptionSectionBackground({required Widget child}) {
+    // This is the brownish band in Figma behind the description + feature list.
+    // It prevents the top purple region from showing through when the user scrolls.
+    if (!kPricingDaytime) return child;
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          // What you meant by "opposite direction":
+          // start at TOP of description, then fade towards bottom.
+          stops: [0.0, 0.16, 0.72, 1.0],
+          colors: [
+            Color(0x66CBA0AD),
+            Color(0x4DCBA0AD),
+            Color(0x1ACBA0AD),
+            Color(0x00CBA0AD),
+          ],
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _planSelector(),
-          const SizedBox(height: 16),
-          _continueBtn(),
-          const SizedBox(height: 8),
-          Text(
-            '-or-',
-            style: AppTheme.captionS(context),
-          ),
-          const SizedBox(height: 8),
-          _dayPassBtn(),
-          const SizedBox(height: 10),
-          Text(
-            'You can continue with text anytime. Voice is optional.',
-            textAlign: TextAlign.center,
-            style:
-                AppTheme.captionS(context).copyWith(color: _w.withOpacity(0.6)),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: child,
       ),
     );
   }
 
   // ─── Title with decorative Turiya script ───────────────────────
-  Widget _title() {
+  Widget _title(
+      {EdgeInsetsGeometry padding =
+          const EdgeInsets.symmetric(horizontal: 32)}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: padding,
       child: Column(
         children: [
           Text(
@@ -236,9 +227,11 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
   }
 
   // ─── Subtitle ──────────────────────────────────────────────────
-  Widget _subtitle() {
+  Widget _subtitle(
+      {EdgeInsetsGeometry padding =
+          const EdgeInsets.symmetric(horizontal: 40)}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40),
+      padding: padding,
       child: Text(
         'Krishna can respond in voice.\ncalm, reflective, and present.',
         textAlign: TextAlign.center,
@@ -289,142 +282,6 @@ class _PricingBottomSheetState extends State<PricingBottomSheet> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  // ─── Plan selector ─────────────────────────────────────────────
-  Widget _planSelector() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: _w.withOpacity(0.2)),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                  child:
-                      _planTile(_PricingPlan.pro, 'Pro', '₹599/mo', '60 mins')),
-              Expanded(
-                  child: _planTile(
-                      _PricingPlan.max, 'Max', '₹1499/mo', '150 mins')),
-            ],
-          ),
-        ),
-        Positioned(
-          top: -14,
-          left: 0,
-          right: 0,
-          child: Row(
-            children: [
-              const Spacer(),
-              Expanded(
-                child: Center(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    decoration: const BoxDecoration(
-                      color: _w,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
-                      ),
-                    ),
-                    child: Text('50% off',
-                        style: AppTheme.captionS(context)
-                            .copyWith(color: const Color(0xFF111111))),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _planTile(_PricingPlan plan, String name, String price, String mins) {
-    final on = _selectedPlan == plan;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedPlan = plan),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border.all(color: on ? _w : Colors.transparent, width: 2),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          children: [
-            Text(name,
-                textAlign: TextAlign.center, style: AppTheme.bodyEL(context)),
-            Text(price,
-                textAlign: TextAlign.center, style: AppTheme.bodyS(context)),
-            const SizedBox(height: 6),
-            Text.rich(
-              TextSpan(children: [
-                TextSpan(text: mins, style: AppTheme.captionSBold(context)),
-                TextSpan(text: ' of voice', style: AppTheme.captionS(context)),
-              ]),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Buttons ───────────────────────────────────────────────────
-  Widget _continueBtn() {
-    return GestureDetector(
-      onTap: widget.onUpgrade,
-      child: Container(
-        width: double.infinity,
-        height: 64,
-        decoration:
-            BoxDecoration(color: _w, borderRadius: BorderRadius.circular(16)),
-        alignment: Alignment.center,
-        child: Text('Continue',
-            style: AppTheme.bodyEL(context)
-                .copyWith(color: const Color(0xFF111111))),
-      ),
-    );
-  }
-
-  Widget _dayPassBtn() {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        width: double.infinity,
-        height: 64,
-        decoration: BoxDecoration(
-          border: Border.all(color: _w),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text.rich(
-              TextSpan(children: [
-                TextSpan(
-                    text: 'Continue with a ', style: AppTheme.bodyM(context)),
-                TextSpan(
-                    text: 'day pass',
-                    style: AppTheme.bodyM(context)
-                        .copyWith(fontWeight: FontWeight.w700)),
-              ]),
-              textAlign: TextAlign.center,
-            ),
-            Text('₹99 · Unlimited voice today',
-                textAlign: TextAlign.center,
-                style: AppTheme.bodyM(context)
-                    .copyWith(color: _w.withOpacity(0.7))),
-          ],
-        ),
       ),
     );
   }
