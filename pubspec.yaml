@@ -102,6 +102,8 @@ flutter:
     - assets/images/pricing/
     - assets/images/pricing/feather.riv
     - assets/icons/
+    - assets/icons/streak_fire.svg
+    - assets/icons/streak_fire.png
     - assets/audio/
     - assets/images/night_bg/
 

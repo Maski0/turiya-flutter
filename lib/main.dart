@@ -24,6 +24,8 @@ import 'models/alignment_data.dart';
 import 'widgets/login_modal.dart';
 import 'widgets/pricing/chat_pricing_bottom_sheet.dart';
 import 'widgets/pricing_bottom_sheet.dart';
+import 'widgets/memory/memory_consent_dialog.dart';
+import 'widgets/streak/krishna_streak_view.dart';
 import 'widgets/chat_sidebar.dart';
 import 'widgets/profile_menu.dart';
 import 'widgets/recording_indicator.dart';
@@ -32,6 +34,8 @@ import 'widgets/icons/hamburger_icon.dart';
 import 'widgets/icons/right_arrow_icon.dart';
 import 'screens/home_screen.dart';
 import 'widgets/home_bottom_input.dart';
+import 'widgets/bottom_input_bar_legacy_backup.dart';
+import 'widgets/bottom_input_bar.dart';
 import 'widgets/main_menu.dart';
 import 'widgets/profile_avatar_widget.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -180,14 +184,23 @@ class _MainScreen extends StatefulWidget {
   State<_MainScreen> createState() => _MainScreenState();
 }
 
+enum _BottomInputVariant { legacy, restyled, reference }
+
 class _MainScreenState extends State<_MainScreen>
     with SingleTickerProviderStateMixin {
+  // Debug/test: toggle which bottom input UI to render.
+  static const _BottomInputVariant _bottomInputVariant =
+      _BottomInputVariant.restyled;
   // Debug/test: keep pricing always visible on the chat screen.
   static const bool _forcePricingOnChatForTesting = false;
+  // Debug/test: force-show the memory consent popup.
+  static const bool _forceMemoryPopupForTesting = false;
+  // Debug/test: force-show the streak celebration screen.
+  static const bool _forceStreakForTesting = false;
   // Debug/test: show the bigger/full pricing screen instead of chat bottom sheet.
   static const bool _showFullPricingScreenForTesting = false;
   // Debug/test: auto-open pricing shortly after chat screen appears.
-  static const bool _autoOpenPricingAfterEnterForTesting = true;
+  static const bool _autoOpenPricingAfterEnterForTesting = false;
   static const Duration _autoOpenPricingDelayForTesting =
       Duration(milliseconds: 1200);
 
@@ -234,6 +247,10 @@ class _MainScreenState extends State<_MainScreen>
   String? _threadId; // Conversation thread ID
   String? _lastUserMessage; // Track last sent message
   bool _showUserMessageBubble = false; // Control user message bubble visibility
+
+  // Debug-only in-app flow: Memory dialog -> Streak celebration.
+  bool _showMemoryConsentDialog = false;
+  bool _showStreakCelebration = false;
 
   // Subtitle state
   AlignmentData? _currentAlignment;
@@ -300,6 +317,17 @@ class _MainScreenState extends State<_MainScreen>
       });
     }
 
+    if (_forceMemoryPopupForTesting || _forceStreakForTesting) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _showMemoryConsentDialog =
+              _forceMemoryPopupForTesting && !_forceStreakForTesting;
+          _showStreakCelebration = _forceStreakForTesting;
+        });
+      });
+    }
+
     // Add scroll listener for chat overlay
     _scrollController.addListener(_handleScroll);
 
@@ -319,6 +347,18 @@ class _MainScreenState extends State<_MainScreen>
       _syncOnboardingDataIfNeeded();
       // Load credits if already authenticated (e.g., coming from onboarding)
       _loadCreditsIfAuthenticated();
+    });
+  }
+
+  List<bool?> _debugWeekForStreak() {
+    final raw = DateTime.now().weekday - 1;
+    final today = raw < 0 ? 0 : (raw > 6 ? 6 : raw);
+    return List<bool?>.generate(7, (i) {
+      if (i > today) return null;
+      if (i == today) return true;
+      // A small bit of variety so the UI resembles the Figma example.
+      if (today >= 4 && i <= 1) return false;
+      return true;
     });
   }
 
@@ -1660,32 +1700,176 @@ class _MainScreenState extends State<_MainScreen>
                             left: 0,
                             right: 0,
                             bottom: MediaQuery.of(context).viewInsets.bottom,
-                            child: HomeBottomSection(
-                              textController: _textController,
-                              focusNode: _textFocusNode,
-                              isGenerating: _isGenerating,
-                              isRecording: _isRecording,
-                              isAudioPlaying: _isAudioPlaying,
-                              onSubmit: (text) => _sendMessage(text, context),
-                              onMicTap: _toggleListening,
-                              onMicLongPress: () {},
-                              onStopAudio: _stopAudio,
-                              enabled: !_showLoginModal,
-                              isLiveKitConnected: _isLiveKitConnected,
-                              isLiveKitConnecting: _isLiveKitConnecting,
-                              onVoiceCallTap: _connectToLiveKit,
-                              onCameraTap: () {
-                                if (!_showChatSidebar) {
-                                  setState(() {
-                                    _showChatSidebar = true;
-                                    _showChip = false;
-                                  });
-                                  _animationController.forward();
+                            child: Builder(
+                              builder: (context) {
+                                switch (_bottomInputVariant) {
+                                  case _BottomInputVariant.legacy:
+                                    return LegacyBottomInputBar(
+                                  textController: _textController,
+                                  focusNode: _textFocusNode,
+                                  isGenerating: _isGenerating,
+                                  isRecording: _isRecording,
+                                  isAudioPlaying: _isAudioPlaying,
+                                  onSubmit: (text) async {
+                                    final t = text.trim();
+                                    if (t.isEmpty) return;
+                                    if (_isRecording) {
+                                      await _speechToText.stop();
+                                      if (!mounted) return;
+                                      setState(() {
+                                        _isRecording = false;
+                                      });
+                                    }
+                                    _sendMessage(t, context);
+                                  },
+                                  onMicTap: _toggleListening,
+                                  onMicLongPress: () {},
+                                  onStopAudio: _stopAudio,
+                                  enabled: !_showLoginModal,
+                                  isLiveKitConnected: _isLiveKitConnected,
+                                  isLiveKitConnecting: _isLiveKitConnecting,
+                                  onVoiceCallTap: _toggleLiveKitVoice,
+                                  onDisconnectLiveKit: _disconnectFromLiveKit,
+                                  onSettingsTap: () {
+                                    setState(() {
+                                      _showMenuDrawer = true;
+                                    });
+                                    _animationController.forward();
+                                  },
+                                  isMicMuted:
+                                      !_liveKitService.isMicrophoneEnabled,
+                                  onMicToggle: () async {
+                                    if (!_isLiveKitConnected) return;
+                                    await _liveKitService.setMicrophoneEnabled(
+                                      !_liveKitService.isMicrophoneEnabled,
+                                    );
+                                    if (mounted) setState(() {});
+                                  },
+                                  showChatButton: true,
+                                  onChatButtonTap: () {
+                                    if (!_showChatSidebar) {
+                                      setState(() {
+                                        _showChatSidebar = true;
+                                        _showChip = false;
+                                      });
+                                      _animationController.forward();
+                                    }
+                                  },
+                                  hidePonderingChip: _showChatSidebar,
+                                );
+                                  case _BottomInputVariant.restyled:
+                                    return BottomInputBar(
+                                  textController: _textController,
+                                  focusNode: _textFocusNode,
+                                  isGenerating: _isGenerating,
+                                  isRecording: _isRecording,
+                                  isAudioPlaying: _isAudioPlaying,
+                                  showSuggestions: !_showChatSidebar,
+                                  onSuggestionTap: (text) =>
+                                      _sendMessage(text, context),
+                                  onSubmit: (text) async {
+                                    final t = text.trim();
+                                    if (t.isEmpty) return;
+                                    if (_isRecording) {
+                                      await _speechToText.stop();
+                                      if (!mounted) return;
+                                      setState(() {
+                                        _isRecording = false;
+                                      });
+                                    }
+                                    _sendMessage(t, context);
+                                  },
+                                  onMicTap: _toggleListening,
+                                  onMicLongPress: () {},
+                                  onStopAudio: _stopAudio,
+                                  enabled: !_showLoginModal,
+                                  isLiveKitConnected: _isLiveKitConnected,
+                                  isLiveKitConnecting: _isLiveKitConnecting,
+                                  onVoiceCallTap: _toggleLiveKitVoice,
+                                  onDisconnectLiveKit: _disconnectFromLiveKit,
+                                  onSettingsTap: () {
+                                    setState(() {
+                                      _showMenuDrawer = true;
+                                    });
+                                    _animationController.forward();
+                                  },
+                                  isMicMuted:
+                                      !_liveKitService.isMicrophoneEnabled,
+                                  onMicToggle: () async {
+                                    if (!_isLiveKitConnected) return;
+                                    await _liveKitService.setMicrophoneEnabled(
+                                      !_liveKitService.isMicrophoneEnabled,
+                                    );
+                                    if (mounted) setState(() {});
+                                  },
+                                  showChatButton: true,
+                                  onChatButtonTap: () {
+                                    if (!_showChatSidebar) {
+                                      setState(() {
+                                        _showChatSidebar = true;
+                                        _showChip = false;
+                                      });
+                                      _animationController.forward();
+                                    }
+                                  },
+                                  hidePonderingChip: _showChatSidebar,
+                                );
+                                  case _BottomInputVariant.reference:
+                                    return HomeBottomSection(
+                                  textController: _textController,
+                                  focusNode: _textFocusNode,
+                                  isGenerating: _isGenerating,
+                                  isRecording: _isRecording,
+                                  isAudioPlaying: _isAudioPlaying,
+                                  onSubmit: (text) => _sendMessage(text, context),
+                                  onMicTap: _toggleListening,
+                                  onMicLongPress: () {},
+                                  onRecordingSubmit: () async {
+                                    await _speechToText.stop();
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _isRecording = false;
+                                    });
+                                    final t = _textController.text.trim();
+                                    if (t.isNotEmpty) _sendMessage(t, context);
+                                  },
+                                  onStopAudio: _stopAudio,
+                                  enabled: !_showLoginModal,
+                                  isLiveKitConnected: _isLiveKitConnected,
+                                  isLiveKitConnecting: _isLiveKitConnecting,
+                                  isMicMuted:
+                                      !_liveKitService.isMicrophoneEnabled,
+                                  onMicToggle: () async {
+                                    if (!_isLiveKitConnected) return;
+                                    await _liveKitService.setMicrophoneEnabled(
+                                      !_liveKitService.isMicrophoneEnabled,
+                                    );
+                                    if (mounted) setState(() {});
+                                  },
+                                  onDisconnectLiveKit: _disconnectFromLiveKit,
+                                  onSettingsTap: () {
+                                    setState(() {
+                                      _showMenuDrawer = true;
+                                    });
+                                    _animationController.forward();
+                                  },
+                                  onVoiceCallTap: _toggleLiveKitVoice,
+                                  onCameraTap: () {
+                                    if (!_showChatSidebar) {
+                                      setState(() {
+                                        _showChatSidebar = true;
+                                        _showChip = false;
+                                      });
+                                      _animationController.forward();
+                                    }
+                                  },
+                                  onSuggestionTap: (text) =>
+                                      _sendMessage(text, context),
+                                  showSuggestions: !_showChatSidebar,
+                                  hidePonderingChip: _showChatSidebar,
+                                );
                                 }
                               },
-                              onSuggestionTap: (text) =>
-                                  _sendMessage(text, context),
-                              showSuggestions: !_showChatSidebar,
                             ),
                           ),
 
@@ -1760,6 +1944,52 @@ class _MainScreenState extends State<_MainScreen>
                                           },
                                     onDayPass: () {},
                                   ),
+
+                          // Memory consent popup (debug/testing)
+                          if ((_forceMemoryPopupForTesting ||
+                                  _showMemoryConsentDialog) &&
+                              !(_forceStreakForTesting ||
+                                  _showStreakCelebration))
+                            MemoryConsentDialog(
+                              onBackdropTap: _forceMemoryPopupForTesting
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _showMemoryConsentDialog = false;
+                                      });
+                                    },
+                              onSkip: () {
+                                setState(() {
+                                  _showMemoryConsentDialog = false;
+                                  _showStreakCelebration = true;
+                                });
+                              },
+                              onEnableMemory: () {
+                                setState(() {
+                                  _showMemoryConsentDialog = false;
+                                  _showStreakCelebration = true;
+                                });
+                              },
+                            ),
+
+                          // Streak celebration (debug/testing)
+                          if (_forceStreakForTesting || _showStreakCelebration)
+                            KrishnaStreakView(
+                              week: _debugWeekForStreak(),
+                              onBackdropTap: _forceStreakForTesting
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _showStreakCelebration = false;
+                                      });
+                                    },
+                              onContinue: () {
+                                if (_forceStreakForTesting) return;
+                                setState(() {
+                                  _showStreakCelebration = false;
+                                });
+                              },
+                            ),
                         ], // Close inner Stack children (UI elements)
                       ), // Close inner Stack
                     ), // Close LiquidGlassLayer

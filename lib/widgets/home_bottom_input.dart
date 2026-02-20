@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter_liquid_glass_plus/flutter_liquid_glass.dart';
+import 'star_border.dart';
 
 const _blackGlassSettings = LiquidGlassSettings(
   thickness: 15,
@@ -23,14 +24,20 @@ class HomeBottomSection extends StatefulWidget {
   final Function(String) onSubmit;
   final VoidCallback onMicTap;
   final VoidCallback? onMicLongPress;
+  final VoidCallback? onRecordingSubmit;
   final VoidCallback? onStopAudio;
   final bool enabled;
   final bool isLiveKitConnected;
   final bool isLiveKitConnecting;
   final VoidCallback? onVoiceCallTap;
+  final VoidCallback? onDisconnectLiveKit;
+  final VoidCallback? onSettingsTap;
+  final bool isMicMuted;
+  final VoidCallback? onMicToggle;
   final VoidCallback? onCameraTap;
   final Function(String) onSuggestionTap;
   final bool showSuggestions;
+  final bool hidePonderingChip;
 
   const HomeBottomSection({
     super.key,
@@ -42,14 +49,20 @@ class HomeBottomSection extends StatefulWidget {
     required this.onSubmit,
     required this.onMicTap,
     this.onMicLongPress,
+    this.onRecordingSubmit,
     this.onStopAudio,
     this.enabled = true,
     this.isLiveKitConnected = false,
     this.isLiveKitConnecting = false,
     this.onVoiceCallTap,
+    this.onDisconnectLiveKit,
+    this.onSettingsTap,
+    this.isMicMuted = false,
+    this.onMicToggle,
     this.onCameraTap,
     required this.onSuggestionTap,
     this.showSuggestions = true,
+    this.hidePonderingChip = false,
   });
 
   @override
@@ -91,10 +104,44 @@ class _HomeBottomSectionState extends State<HomeBottomSection> {
 
   @override
   Widget build(BuildContext context) {
+    final isPondering = widget.isGenerating && !widget.isAudioPlaying;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Old behavior parity: pondering chip above input (hidden when sidebar open).
+          if (isPondering && !widget.hidePonderingChip)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: LGContainer(
+                  useOwnLayer: true,
+                  quality: LGQuality.premium,
+                  shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+                  settings: _blackGlassSettings,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Pondering',
+                        style: AppTheme.bodyS(context).copyWith(
+                          color: Colors.white.withOpacity(0.9),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const _LoadingBeads(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           // Suggestion chips - hide when typing, pondering, or on chat screen
           if (widget.showSuggestions &&
               !widget.isLiveKitConnected &&
@@ -129,12 +176,73 @@ class _HomeBottomSectionState extends State<HomeBottomSection> {
           Padding(
             key: const ValueKey('input_bar'),
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: _buildInputRow(),
+            child: (widget.isLiveKitConnected || widget.isLiveKitConnecting)
+                ? _buildVoiceModeUI()
+                : _buildInputRow(),
           ),
 
           const SizedBox(height: 28),
         ],
       ),
+    );
+  }
+
+  Widget _buildVoiceModeUI() {
+    Widget buildButton({
+      required Widget child,
+      VoidCallback? onTap,
+      String? tooltip,
+    }) {
+      final button = GestureDetector(
+        onTap: onTap,
+        child: LGContainer(
+          useOwnLayer: true,
+          quality: LGQuality.premium,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+          settings: _blackGlassSettings,
+          width: 48,
+          height: 48,
+          child: Center(child: child),
+        ),
+      );
+      return tooltip == null ? button : Tooltip(message: tooltip, child: button);
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        buildButton(
+          tooltip: widget.isMicMuted ? 'Unmute Mic' : 'Mute Mic',
+          onTap: widget.onMicToggle,
+          child: Icon(
+            widget.isMicMuted ? Icons.mic_off : Icons.mic,
+            color: Colors.white,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        buildButton(
+          tooltip: widget.isLiveKitConnecting ? 'Connecting...' : 'Disconnect',
+          onTap: widget.onDisconnectLiveKit,
+          child: widget.isLiveKitConnecting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.close, color: Colors.white, size: 20),
+        ),
+        const SizedBox(width: 16),
+        buildButton(
+          tooltip: 'Settings',
+          onTap: widget.onSettingsTap,
+          child: const Icon(Icons.settings_outlined,
+              color: Colors.white, size: 20),
+        ),
+      ],
     );
   }
 
@@ -223,47 +331,82 @@ class _HomeBottomSectionState extends State<HomeBottomSection> {
                   : widget.isAudioPlaying
                       ? _buildSpeakingContent()
                       : Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: TextField(
-                              controller: widget.textController,
-                              focusNode: widget.focusNode,
-                              enabled: widget.enabled,
-                              readOnly: disabled,
-                              maxLines: 5,
-                              minLines: 1,
-                              style: AppTheme.bodyM(context).copyWith(
-                                color: Colors.white,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Ask what your heart seeks',
-                                hintStyle: AppTheme.bodyM(context).copyWith(
-                                  color: Colors.white.withOpacity(0.5),
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: TextField(
+                                  controller: widget.textController,
+                                  focusNode: widget.focusNode,
+                                  enabled: widget.enabled,
+                                  readOnly: disabled,
+                                  maxLines: 5,
+                                  minLines: 1,
+                                  style: AppTheme.bodyM(context).copyWith(
+                                    color: Colors.white,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Ask what your heart seeks',
+                                    hintStyle: AppTheme.bodyM(context).copyWith(
+                                      color: Colors.white.withOpacity(0.5),
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 16),
+                                    isDense: true,
+                                  ),
+                                  onSubmitted: widget.onSubmit,
                                 ),
-                                border: InputBorder.none,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 16),
-                                isDense: true,
                               ),
-                              onSubmitted: widget.onSubmit,
                             ),
-                          ),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                          child: widget.isRecording
+                              ? _buildRecordingSubmitButton()
+                              : hasText
+                                  ? _buildSendButton()
+                                  : _buildIdleButtons(disabled),
+                            ),
+                          ],
                         ),
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: hasText
-                              ? _buildSendButton()
-                              : _buildIdleButtons(disabled),
-                        ),
-                      ],
-                    ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRecordingSubmitButton() {
+    return GestureDetector(
+      onTap: widget.onRecordingSubmit ??
+          () {
+            final text = widget.textController.text.trim();
+            if (text.isNotEmpty) widget.onSubmit(text);
+          },
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0x14111111),
+              offset: const Offset(0, 4),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: Center(
+          child: SvgPicture.asset(
+            'assets/icons/check.svg',
+            width: 18,
+            height: 18,
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          ),
+        ),
+      ),
     );
   }
 
@@ -407,25 +550,30 @@ class _HomeBottomSectionState extends State<HomeBottomSection> {
         if (!widget.isLiveKitConnected)
           GestureDetector(
             onTap: widget.onVoiceCallTap,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0x14111111),
-                    offset: const Offset(0, 4),
-                    blurRadius: 16,
+            child: AnimatedStarBorder(
+              color: const Color(0x99FFFFFF),
+              speed: const Duration(seconds: 8),
+              borderRadius: 12,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0x14111111),
+                      offset: const Offset(0, 4),
+                      blurRadius: 16,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: SvgPicture.asset(
+                    'assets/icons/waveform.svg',
+                    width: 16,
+                    height: 14,
                   ),
-                ],
-              ),
-              child: Center(
-                child: SvgPicture.asset(
-                  'assets/icons/waveform.svg',
-                  width: 16,
-                  height: 14,
                 ),
               ),
             ),
@@ -553,7 +701,8 @@ class _SpeakingBeadsState extends State<_SpeakingBeads>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: List.generate(4, (i) {
               final phase = (_controller.value + i * 0.25) % 1.0;
-              final scale = 0.5 + 0.5 * (0.5 + 0.5 * (1.0 - (2.0 * (phase - 0.5)).abs()));
+              final scale =
+                  0.5 + 0.5 * (0.5 + 0.5 * (1.0 - (2.0 * (phase - 0.5)).abs()));
               final h = _baseHeights[i] * scale;
               return Container(
                 width: _barWidth,
